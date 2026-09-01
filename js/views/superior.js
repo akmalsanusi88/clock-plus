@@ -18,14 +18,17 @@ export function renderSuperiorView(container, superiorId) {
     const totalTeamApprovedHours = approvedTeamRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
     // Current superior personal monthly limit calculation
-    const myApproved = teamRequests.filter(r => 
-        r.status === 'Approved' && (r.requesterId === superiorId || (r.teamMembers && r.teamMembers.includes(superiorId)))
+    const myAuthorized = teamRequests.filter(r => 
+        (r.status === 'Approved' || r.status === 'Completed') && (r.requesterId === superiorId || (r.teamMembers && r.teamMembers.includes(superiorId)))
     );
-    const myApprovedHours = myApproved.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+    const myAuthorizedHours = myAuthorized.reduce((acc, r) => {
+        const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+        return acc + (isNaN(h) ? 0 : h);
+    }, 0);
     const myLimits = superiorId ? db.getWorkerLimits(superiorId) : { monthlyMax: 104 };
     const myMonthlyMax = myLimits.monthlyMax || 104;
-    const myRemainingHours = Math.max(0, myMonthlyMax - myApprovedHours);
-    const myPercentage = myMonthlyMax > 0 ? Math.min(100, Math.round((myApprovedHours / myMonthlyMax) * 100)) : 0;
+    const myRemainingHours = Math.max(0, myMonthlyMax - myAuthorizedHours);
+    const myPercentage = myMonthlyMax > 0 ? Math.min(100, Math.round((myAuthorizedHours / myMonthlyMax) * 100)) : 0;
     const myProgressColor = myPercentage >= 90 ? 'var(--danger)' : (myPercentage >= 70 ? 'var(--warning)' : 'var(--success)');
 
     // Available years for filter
@@ -467,12 +470,15 @@ export function renderSuperiorView(container, superiorId) {
 
     // --- 4. Render Subordinates List (Teammates OT utilization) ---
     const loadSubordinates = () => {
-        const allApprovedRequests = db.getRequests().filter(r => r.status === 'Approved');
+        const allAuthorizedRequests = db.getRequests().filter(r => r.status === 'Approved' || r.status === 'Completed');
         subordinatesList.innerHTML = subordinates.map(s => {
-            const workerRequests = allApprovedRequests.filter(r => 
+            const workerRequests = allAuthorizedRequests.filter(r => 
                 r.requesterId === s.id || (r.teamMembers && r.teamMembers.includes(s.id))
             );
-            const totalHours = workerRequests.reduce((sum, r) => sum + (Number(r.duration) || 0), 0);
+            const totalHours = workerRequests.reduce((sum, r) => {
+                const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                return sum + (isNaN(h) ? 0 : h);
+            }, 0);
             const limits = db.getWorkerLimits(s.id);
             const monthlyMax = limits.monthlyMax || 104;
             

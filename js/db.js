@@ -304,6 +304,16 @@ class Database {
                 approverRemarks: r.approver_remarks || null,
                 isSpecialRequest: Boolean(r.is_special_request),
                 workerConsented: Boolean(r.worker_consented),
+                actualStartDate: r.actual_start_date || null,
+                actualEndDate: r.actual_end_date || null,
+                actualTimeStart: r.actual_time_start || null,
+                actualTimeEnd: r.actual_time_end || null,
+                actualDuration: r.actual_duration ? Number(r.actual_duration) : null,
+                actualGrossDuration: r.actual_gross_duration ? Number(r.actual_gross_duration) : null,
+                actualRestDeduction: r.actual_rest_deduction ? Number(r.actual_rest_deduction) : null,
+                closingRemarks: r.closing_remarks || null,
+                closedAt: r.closed_at || null,
+                closedBy: r.closed_by || null,
                 history: Array.isArray(r.history) ? r.history : (typeof r.history === 'string' ? JSON.parse(r.history || '[]') : [])
             }));
 
@@ -1091,7 +1101,7 @@ class Database {
     }
 
     getAccruedHours(workerId, dateStr, scope = 'day') {
-        const requests = this.getRequests().filter(r => r.status === 'Approved');
+        const requests = this.getRequests().filter(r => r.status === 'Approved' || r.status === 'Completed');
         
         let startWindow, endWindow;
         const refDate = new Date(dateStr + 'T00:00:00');
@@ -1115,7 +1125,9 @@ class Database {
         let totalHours = 0;
         for (const req of requests) {
             if (req.requesterId === workerId || (req.teamMembers && req.teamMembers.includes(workerId))) {
-                totalHours += this.getOverlapInHours(req.startDate, req.endDate, startWindow, endWindow);
+                const sDate = req.status === 'Completed' && req.actualStartDate ? req.actualStartDate : req.startDate;
+                const eDate = req.status === 'Completed' && req.actualEndDate ? req.actualEndDate : req.endDate;
+                totalHours += this.getOverlapInHours(sDate, eDate, startWindow, endWindow);
             }
         }
         return totalHours;
@@ -1127,10 +1139,13 @@ class Database {
         const dailyAccrued = this.getAccruedHours(workerId, dateStr, 'day');
         const weeklyAccrued = this.getAccruedHours(workerId, dateStr, 'week');
         
-        const approvedReqs = this.getRequests().filter(r => 
-            r.status === 'Approved' && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
+        const authorizedReqs = this.getRequests().filter(r => 
+            (r.status === 'Approved' || r.status === 'Completed') && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
         );
-        const totalApproved = approvedReqs.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+        const totalAuthorized = authorizedReqs.reduce((acc, r) => {
+            const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+            return acc + (isNaN(h) ? 0 : h);
+        }, 0);
 
         const dailyMax = limits.dailyMax || 4;
         const weeklyMax = limits.weeklyMax || 12;
@@ -1138,7 +1153,7 @@ class Database {
 
         const dailyRemaining = Math.max(0, dailyMax - dailyAccrued);
         const weeklyRemaining = Math.max(0, weeklyMax - weeklyAccrued);
-        const monthlyRemaining = Math.max(0, monthlyMax - totalApproved);
+        const monthlyRemaining = Math.max(0, monthlyMax - totalAuthorized);
 
         return {
             limits: { dailyMax, weeklyMax, monthlyMax, ...limits },
@@ -1363,8 +1378,8 @@ class Database {
             status: newRequest.status,
             rejection_reason: newRequest.rejectionReason || null,
             approver_remarks: newRequest.approverRemarks || null,
-            date_start: newRequest.dateStart || (newRequest.startDate ? newRequest.startDate.slice(0, 10) : null),
-            date_end: newRequest.dateEnd || (newRequest.endDate ? newRequest.endDate.slice(0, 10) : null),
+            date_start: newRequest.date_start || (newRequest.startDate ? newRequest.startDate.slice(0, 10) : null),
+            date_end: newRequest.date_end || (newRequest.endDate ? newRequest.endDate.slice(0, 10) : null),
             time_start: newRequest.timeStart || null,
             time_end: newRequest.timeEnd || null,
             start_date: newRequest.startDate,
@@ -1372,6 +1387,86 @@ class Database {
             duration: Number(newRequest.duration) || 0
         }).eq('id', id).then(({ error }) => {
             if (error) console.error("Error updating overtime_requests in Supabase:", error);
+        });
+
+        return newRequest;
+    }
+
+    closeOvertimeRequest(id, closeoutData, actionUserId) {
+        const data = this.getData();
+        const index = data.requests.findIndex(r => r.id === id);
+        if (index === -1) throw new Error(`Request ${id} not found.`);
+
+        const req = data.requests[index];
+        const user = this.getCurrentUser();
+        const actorId = actionUserId || (user ? user.id : req.requesterId);
+        const actorName = user ? user.name : 'Requester';
+
+        const updatedFields = {
+            status: 'Completed',
+            actualStartDate: closeoutData.actualStartDate || req.startDate,
+            actualEndDate: closeoutData.actualEndDate || req.endDate,
+            actualTimeStart: closeoutData.actualTimeStart || req.timeStart,
+            actualTimeEnd: closeoutData.actualTimeEnd || req.timeEnd,
+            actualDateStart: closeoutData.actualDateStart || req.dateStart,
+            actualDateEnd: closeoutData.actualDateEnd || req.dateEnd,
+            actualDuration: Number(closeoutData.actualDuration) || Number(req.duration) || 0,
+            actualGrossDuration: Number(closeoutData.actualGrossDuration) || Number(req.grossDuration || req.duration) || 0,
+            actualRestDeduction: Number(closeoutData.actualRestDeduction) || 0,
+            closingRemarks: closeoutData.closingRemarks || '',
+            closedAt: new Date().toISOString(),
+            closedBy: actorId
+        };
+
+        const newRequest = { ...req, ...updatedFields };
+        newRequest.history = newRequest.history || [];
+        newRequest.history.push({
+            timestamp: new Date().toISOString(),
+            userId: actorId,
+            action: `Closed & Completed Overtime (${updatedFields.actualDuration}h net actual). Remarks: "${updatedFields.closingRemarks || 'None'}"`
+        });
+
+        data.requests[index] = newRequest;
+        this.saveData(data);
+
+        // Notify Approver / Superior that work was completed and closed
+        const approverIds = new Set();
+        if (req.approverId) approverIds.add(req.approverId);
+        const hierApprovers = this.getApproversForWorker(req.requesterId);
+        if (hierApprovers.level1) approverIds.add(hierApprovers.level1);
+        if (hierApprovers.level2) approverIds.add(hierApprovers.level2);
+        if (hierApprovers.level3) approverIds.add(hierApprovers.level3);
+
+        const projName = this.getProject(newRequest.project)?.name || newRequest.project;
+        approverIds.forEach(targetId => {
+            if (targetId !== actorId) {
+                this.createNotification(
+                    targetId,
+                    `${actorName} has closed and completed Overtime shift (${id}) on ${projName} with ${updatedFields.actualDuration}h actual claimable time.`
+                );
+            }
+        });
+
+        // Sync to Supabase
+        const sbPayload = {
+            status: 'Completed',
+            actual_start_date: updatedFields.actualStartDate,
+            actual_end_date: updatedFields.actualEndDate,
+            actual_time_start: updatedFields.actualTimeStart,
+            actual_time_end: updatedFields.actualTimeEnd,
+            actual_duration: updatedFields.actualDuration,
+            actual_gross_duration: updatedFields.actualGrossDuration,
+            actual_rest_deduction: updatedFields.actualRestDeduction,
+            closing_remarks: updatedFields.closingRemarks,
+            closed_at: updatedFields.closedAt,
+            closed_by: updatedFields.closedBy
+        };
+
+        supabase.from('overtime_requests').update(sbPayload).eq('id', id).then(({ error }) => {
+            if (error) {
+                // If columns not added yet in Supabase, update at least status
+                supabase.from('overtime_requests').update({ status: 'Completed' }).eq('id', id).catch(e => {});
+            }
         });
 
         return newRequest;

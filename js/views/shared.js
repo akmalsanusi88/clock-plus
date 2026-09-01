@@ -250,6 +250,286 @@ export function showRequestDecisionModal(req, action = 'Approved', onDone) {
     };
 }
 
+// Pop-up Confirmation Dialog for Closed Overtime Session
+export function showCloseOTConfirmationModal(req, onDone) {
+    let modal = document.getElementById('ot-closed-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ot-closed-confirm-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+
+    const netDuration = Number(req.actualDuration || req.duration || 0).toFixed(1);
+    const grossDuration = Number(req.actualGrossDuration || req.grossDuration || req.duration || 0).toFixed(1);
+    const restDeduction = Number(req.actualRestDeduction || req.restDeduction || 0).toFixed(1);
+
+    modal.innerHTML = `
+        <div class="modal-box glass-panel" style="max-width: 480px; text-align: center; padding: 30px 24px; animation: modalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: #ecfdf5; border: 2px solid #10b981; color: #10b981; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; box-shadow: 0 6px 18px rgba(16, 185, 129, 0.25);">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:34px;height:34px;stroke-width:2.5;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+            </div>
+
+            <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); margin-bottom: 6px;">
+                Overtime Closed & Completed!
+            </h2>
+            <p style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 20px;">
+                Shift <strong>${req.id}</strong> has been finalized and moved into official timesheet records.
+            </p>
+
+            <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 16px; text-align: left; margin-bottom: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px;">
+                    <div>
+                        <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display: block;">Request ID</span>
+                        <span style="font-weight: 800; font-size: 1.05rem; color: var(--primary);">${req.id}</span>
+                    </div>
+                    <div><span class="badge badge-approved">Completed</span></div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-size: 0.84rem; margin-bottom: 10px;">
+                    <div>
+                        <span style="font-size: 0.74rem; color: var(--text-muted); display: block;">Actual Start</span>
+                        <span style="font-weight: 600; color: var(--text-main);">${formatDateTime(req.actualStartDate || req.startDate)}</span>
+                    </div>
+                    <div>
+                        <span style="font-size: 0.74rem; color: var(--text-muted); display: block;">Actual End</span>
+                        <span style="font-weight: 600; color: var(--text-main);">${formatDateTime(req.actualEndDate || req.endDate)}</span>
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #f8fafc; padding: 8px 12px; border-radius: 8px; font-size: 0.84rem;">
+                    <span>Final Claimable OT:</span>
+                    <strong style="color: var(--primary); font-size: 1.05rem;">${netDuration} hrs ${Number(restDeduction) > 0 ? `(Gross: ${grossDuration}h, Break: -${restDeduction}h)` : ''}</strong>
+                </div>
+
+                ${req.closingRemarks ? `
+                    <div style="margin-top: 10px; font-size: 0.8rem; color: var(--text-muted); border-top: 1px solid var(--border-color); padding-top: 8px;">
+                        <strong>Completion Remarks:</strong> "${req.closingRemarks}"
+                    </div>
+                ` : ''}
+            </div>
+
+            <button type="button" class="btn btn-primary" id="btn-close-ot-confirm-ok" style="width: 100%; padding: 10px; font-size: 0.95rem; font-weight: 700;">
+                Done & View Records
+            </button>
+        </div>
+    `;
+
+    modal.classList.add('active');
+
+    const btnOk = document.getElementById('btn-close-ot-confirm-ok');
+    btnOk.onclick = () => {
+        modal.classList.remove('active');
+        if (onDone) onDone();
+    };
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.classList.remove('active');
+            if (onDone) onDone();
+        }
+    };
+}
+
+// Modal for Requester to Close an Approved Overtime Shift
+export function openCloseOTModal(requestId, onDone) {
+    if (typeof window === 'undefined' || !window.db) return;
+    const db = window.db;
+
+    const req = db.getRequest(requestId);
+    if (!req) return;
+
+    let modal = document.getElementById('close-ot-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'close-ot-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+
+    const scheduledStartDate = req.dateStart || (req.startDate ? req.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const scheduledEndDate = req.dateEnd || (req.endDate ? req.endDate.slice(0, 10) : scheduledStartDate);
+    const scheduledTimeStart = req.timeStart || '18:00';
+    const scheduledTimeEnd = req.timeEnd || '20:00';
+
+    const project = db.getProject(req.project);
+    const projectName = project ? project.name : (req.project || 'Project');
+
+    modal.innerHTML = `
+        <div class="modal-box glass-panel" style="max-width: 520px; padding: 24px; animation: modalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 14px;">
+                <div>
+                    <span style="font-size: 0.72rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">Work Completion Step</span>
+                    <h2 style="font-size: 1.25rem; font-weight: 800; color: var(--text-main); margin-top: 2px;">
+                        Close Overtime Session (${req.id})
+                    </h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                        Submit actual work hours and completion notes to finalize this shift into the official records.
+                    </p>
+                </div>
+                <button type="button" id="btn-close-ot-modal-x" style="background: none; border: none; font-size: 1.3rem; color: var(--text-muted); cursor: pointer;">&times;</button>
+            </div>
+
+            <!-- Scheduled vs Actual Info Banner -->
+            <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px; margin-bottom: 16px; font-size: 0.82rem;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                    <span style="color: var(--text-muted);">Project:</span>
+                    <strong style="color: var(--text-main);">${projectName}</strong>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                    <span style="color: var(--text-muted);">Scheduled Plan:</span>
+                    <span style="font-weight: 600; color: var(--text-main);">${scheduledStartDate} ${scheduledTimeStart} &rarr; ${scheduledEndDate} ${scheduledTimeEnd} (${Number(req.duration || 0).toFixed(1)}h)</span>
+                </div>
+            </div>
+
+            <form id="close-ot-form">
+                <!-- Actual Date & Time Inputs -->
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="close-actual-date-start" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 3px; display: block;">Actual Date Start</label>
+                        <input type="date" id="close-actual-date-start" required value="${scheduledStartDate}" style="height: 36px; padding: 0 8px; font-size: 0.82rem; width: 100%;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="close-actual-time-start" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 3px; display: block;">Actual Time Start</label>
+                        <input type="time" id="close-actual-time-start" required value="${scheduledTimeStart}" style="height: 36px; padding: 0 8px; font-size: 0.82rem; width: 100%;">
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px;">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="close-actual-date-end" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 3px; display: block;">Actual Date End</label>
+                        <input type="date" id="close-actual-date-end" required value="${scheduledEndDate}" style="height: 36px; padding: 0 8px; font-size: 0.82rem; width: 100%;">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="close-actual-time-end" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 3px; display: block;">Actual Time End</label>
+                        <input type="time" id="close-actual-time-end" required value="${scheduledTimeEnd}" style="height: 36px; padding: 0 8px; font-size: 0.82rem; width: 100%;">
+                    </div>
+                </div>
+
+                <!-- Live Actual Calculation Display -->
+                <div id="close-ot-calc-feedback" style="margin-bottom: 14px; padding: 10px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.82rem; color: #065f46;">
+                    <!-- Dynamically updated -->
+                </div>
+
+                <!-- Completion Remarks / Handover Notes -->
+                <div class="form-group" style="margin-bottom: 18px;">
+                    <label for="close-actual-remarks" style="font-size: 0.78rem; font-weight: 600; margin-bottom: 3px; display: block;">Work Completion Remarks & Notes</label>
+                    <textarea id="close-actual-remarks" placeholder="Summarize deliverables completed, handover status, or any reasons if actual hours differed from schedule..." style="min-height: 70px; padding: 8px 10px; font-size: 0.82rem; width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                    <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-close-ot" style="padding: 6px 14px;">Cancel</button>
+                    <button type="submit" class="btn btn-success btn-sm" id="btn-submit-close-ot" style="padding: 6px 18px; font-weight: 700;">Confirm & Close Overtime</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    modal.classList.add('active');
+
+    const dateStartIn = document.getElementById('close-actual-date-start');
+    const timeStartIn = document.getElementById('close-actual-time-start');
+    const dateEndIn = document.getElementById('close-actual-date-end');
+    const timeEndIn = document.getElementById('close-actual-time-end');
+    const calcFeedback = document.getElementById('close-ot-calc-feedback');
+    const remarksIn = document.getElementById('close-actual-remarks');
+    const form = document.getElementById('close-ot-form');
+    const btnCancel = document.getElementById('btn-cancel-close-ot');
+    const btnX = document.getElementById('btn-close-ot-modal-x');
+
+    const updateActualCalculation = () => {
+        const dStart = dateStartIn.value;
+        const tStart = timeStartIn.value;
+        const dEnd = dateEndIn.value;
+        const tEnd = timeEndIn.value;
+
+        if (!dStart || !tStart || !dEnd || !tEnd) {
+            calcFeedback.innerHTML = `<span style="color:var(--text-muted);">Please fill in start and end times.</span>`;
+            return { valid: false };
+        }
+
+        const startObj = new Date(`${dStart}T${tStart}:00`);
+        const endObj = new Date(`${dEnd}T${tEnd}:00`);
+        const grossHours = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
+
+        if (isNaN(grossHours) || grossHours <= 0) {
+            calcFeedback.style.background = '#fef2f2';
+            calcFeedback.style.borderColor = '#fecaca';
+            calcFeedback.style.color = '#991b1b';
+            calcFeedback.innerHTML = `⚠️ <strong>Invalid time range:</strong> End time must be after start time.`;
+            return { valid: false };
+        }
+
+        const calc = db.calculateNetOvertime(grossHours);
+        calcFeedback.style.background = '#ecfdf5';
+        calcFeedback.style.borderColor = '#a7f3d0';
+        calcFeedback.style.color = '#065f46';
+
+        let breakText = calc.restDeducted > 0 ? ` (Rest Break: <strong>-${calc.restDeducted.toFixed(1)}h</strong>)` : '';
+        calcFeedback.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div>Gross Working Time: <strong>${calc.grossHours.toFixed(1)}h</strong>${breakText}</div>
+                    <div style="font-size:0.75rem; color:#047857; margin-top:2px;">Net Claimable Overtime:</div>
+                </div>
+                <div style="font-size:1.25rem; font-weight:800; color:#059669;">${calc.netHours.toFixed(1)} hrs</div>
+            </div>
+        `;
+
+        return {
+            valid: true,
+            startISO: startObj.toISOString(),
+            endISO: endObj.toISOString(),
+            grossHours: calc.grossHours,
+            restDeducted: calc.restDeducted,
+            netHours: calc.netHours,
+            dStart, tStart, dEnd, tEnd
+        };
+    };
+
+    [dateStartIn, timeStartIn, dateEndIn, timeEndIn].forEach(input => {
+        input.oninput = updateActualCalculation;
+        input.onchange = updateActualCalculation;
+    });
+
+    updateActualCalculation();
+
+    const closeModal = () => {
+        modal.classList.remove('active');
+    };
+
+    btnCancel.onclick = closeModal;
+    btnX.onclick = closeModal;
+    modal.onclick = (e) => {
+        if (e.target === modal) closeModal();
+    };
+
+    form.onsubmit = (e) => {
+        e.preventDefault();
+        const calcRes = updateActualCalculation();
+        if (!calcRes.valid) return;
+
+        const closeoutData = {
+            actualStartDate: calcRes.startISO,
+            actualEndDate: calcRes.endISO,
+            actualDateStart: calcRes.dStart,
+            actualDateEnd: calcRes.dEnd,
+            actualTimeStart: calcRes.tStart,
+            actualTimeEnd: calcRes.tEnd,
+            actualDuration: calcRes.netHours,
+            actualGrossDuration: calcRes.grossHours,
+            actualRestDeduction: calcRes.restDeducted,
+            closingRemarks: remarksIn.value.trim()
+        };
+
+        const closedReq = db.closeOvertimeRequest(requestId, closeoutData);
+        closeModal();
+
+        showCloseOTConfirmationModal(closedReq, onDone);
+    };
+}
+
 // Render a toast notification
 export function showToast(message, type = 'info') {
     const container = document.getElementById('toast-container');

@@ -2,7 +2,7 @@ import { db } from './db.js';
 import { renderAdminView, renderAdminRequest, renderAdminReport } from './views/admin.js';
 import { renderWorkerView } from './views/worker.js';
 import { renderSuperiorView } from './views/superior.js';
-import { showToast, showRequestDecisionModal, formatDateTime, icons } from './views/shared.js';
+import { showToast, showRequestDecisionModal, openCloseOTModal, formatDateTime, icons } from './views/shared.js';
 
 // Application State
 const state = {
@@ -13,7 +13,9 @@ const state = {
 
 // Initialize Application
 document.addEventListener('DOMContentLoaded', async () => {
+    window.db = db;
     window.openRequestReviewModal = openRequestReviewModal;
+    window.openCloseOTModal = openCloseOTModal;
     initNotificationSystem();
     initResponsiveNav();
     initLoginScreen(); // Bind submit event immediately on page load
@@ -737,6 +739,31 @@ export function openRequestReviewModal(requestId) {
         `;
     }
 
+    if (req.status === 'Completed') {
+        contentHtml += `
+            <div style="background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 10px; padding: 14px; font-size: 0.88rem; color: #065f46;">
+                <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    ${icons.check} Actual Work Completion Summary (Closed Shift)
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82rem; margin-bottom: 8px;">
+                    <div>Actual Start: <strong>${formatDateTime(req.actualStartDate || req.startDate)}</strong></div>
+                    <div>Actual End: <strong>${formatDateTime(req.actualEndDate || req.endDate)}</strong></div>
+                    <div>Gross Working Time: <strong>${Number(req.actualGrossDuration || req.grossDuration || req.duration).toFixed(1)} hrs</strong></div>
+                    <div>Rest Break Deducted: <strong>-${Number(req.actualRestDeduction || 0).toFixed(1)} hrs</strong></div>
+                </div>
+                <div style="background: #ffffff; border: 1px solid #a7f3d0; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                    <span style="font-weight: 600;">Final Claimable Overtime:</span>
+                    <span style="font-weight: 800; font-size: 1.1rem; color: #059669;">${Number(req.actualDuration || req.duration).toFixed(1)} hrs</span>
+                </div>
+                ${req.closingRemarks ? `
+                    <div style="margin-top: 8px; font-size: 0.82rem;">
+                        <strong>Completion Remarks:</strong> "${req.closingRemarks}"
+                    </div>
+                ` : ''}
+            </div>
+        `;
+    }
+
     if (isApproverOrAdmin && req.status === 'Pending Approval') {
         contentHtml += `
             <!-- Approver Controls: Adjust Schedule -->
@@ -789,8 +816,10 @@ export function openRequestReviewModal(requestId) {
             </div>
         `;
     } else {
+        const canClose = req.status === 'Approved' && (req.requesterId === currentUser?.id || isApproverOrAdmin);
         contentHtml += `
-            <div class="modal-footer" style="margin-top: 14px;">
+            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
+                ${canClose ? `<button type="button" class="btn btn-success" id="rev-btn-close-ot" style="font-weight:700;">Close OT &amp; Submit Actuals</button>` : ''}
                 <button type="button" class="btn btn-primary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Close</button>
             </div>
         `;
@@ -798,6 +827,18 @@ export function openRequestReviewModal(requestId) {
 
     modalBody.innerHTML = contentHtml;
     modal.classList.add('active');
+
+    const btnCloseOt = document.getElementById('rev-btn-close-ot');
+    if (btnCloseOt) {
+        btnCloseOt.onclick = () => {
+            modal.classList.remove('active');
+            if (window.openCloseOTModal) {
+                window.openCloseOTModal(req.id, () => {
+                    renderActiveView();
+                });
+            }
+        };
+    }
 
     // Attach event handlers if approver controls are active
     if (isApproverOrAdmin && req.status === 'Pending Approval') {

@@ -233,18 +233,28 @@ export function renderAdminDashboard(container) {
                         const proj = db.getProject(r.project);
                         const pName = proj ? proj.name : (r.project || 'General');
                         let stBadge = `<span class="badge badge-pending">Pending</span>`;
-                        if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                        if (r.status === 'Completed') stBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+                        else if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
                         else if (r.status === 'Rejected') stBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
+
+                        const isReqUser = r.requesterId === currentUserId || (currentEmail && r.requesterId === currentEmail);
+                        const canClose = r.status === 'Approved' && (isReqUser || isAdmin);
+                        const durationDisplay = r.status === 'Completed' && r.actualDuration != null
+                            ? `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`
+                            : `${Number(r.duration || 0).toFixed(1)} hrs`;
                         
                         return `
                             <div class="mobile-shift-card" style="margin-bottom: 0; padding: 10px 12px;">
                                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                                     <strong style="color: var(--primary); font-size: 0.88rem;">${r.id} &bull; ${pName}</strong>
-                                    <div>${stBadge}</div>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        ${canClose ? `<button type="button" class="btn btn-success btn-sm btn-admin-close-ot" data-id="${r.id}" style="padding: 2px 8px; font-size: 0.72rem; font-weight: 700;">Close OT</button>` : ''}
+                                        ${stBadge}
+                                    </div>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted);">
-                                    <span>${formatDateTime(r.startDate || r.dateStart)}</span>
-                                    <strong style="color: var(--text-main); font-size: 0.84rem;">${Number(r.duration || 0).toFixed(1)} hrs</strong>
+                                    <span>${formatDateTime(r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart))}</span>
+                                    <strong style="color: var(--text-main); font-size: 0.84rem;">${durationDisplay}</strong>
                                 </div>
                             </div>
                         `;
@@ -457,6 +467,18 @@ export function renderAdminDashboard(container) {
                 const reqId = btn.dataset.id;
                 if (window.openRequestReviewModal) {
                     window.openRequestReviewModal(reqId);
+                }
+            };
+        });
+
+        container.querySelectorAll('.btn-admin-close-ot').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const reqId = btn.dataset.id;
+                if (reqId && window.openCloseOTModal) {
+                    window.openCloseOTModal(reqId, () => {
+                        renderAdminDashboard(container);
+                    });
                 }
             };
         });
@@ -895,9 +917,10 @@ export function renderAdminReport(container) {
 
                     <div class="filter-group" style="margin-bottom: 0;">
                         <label for="rep-filter-status" style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Status:</label>
-                        <select id="rep-filter-status" class="filter-input" style="min-width: 120px; height: 34px; font-size: 0.8rem; padding: 0 8px;">
+                        <select id="rep-filter-status" class="filter-input" style="min-width: 130px; height: 34px; font-size: 0.8rem; padding: 0 8px;">
                             <option value="">All Statuses</option>
-                            <option value="Approved">Approved</option>
+                            <option value="Completed">Completed (Closed)</option>
+                            <option value="Approved">Approved (Active)</option>
                             <option value="Pending Approval">Pending Approval</option>
                             <option value="Pending Worker Consent">Pending Consent</option>
                             <option value="Rejected">Rejected</option>
@@ -1209,7 +1232,11 @@ export function renderAdminReport(container) {
 
         currentFiltered.sort((a,b) => new Date(b.startDate || b.dateStart) - new Date(a.startDate || a.dateStart));
 
-        const totalHours = currentFiltered.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+        const totalHours = currentFiltered.reduce((acc, r) => {
+            const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+            return acc + (isNaN(h) ? 0 : h);
+        }, 0);
+        const completedHours = currentFiltered.filter(r => r.status === 'Completed').reduce((acc, r) => acc + (Number(r.actualDuration != null ? r.actualDuration : r.duration) || 0), 0);
         const approvedHours = currentFiltered.filter(r => r.status === 'Approved').reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
         const participatingWorkerIds = new Set();
@@ -1226,7 +1253,7 @@ export function renderAdminReport(container) {
             ? ` | Period: <strong>${fromDateStr || 'Start'}</strong> to <strong>${toDateStr || 'Latest'}</strong>`
             : '';
 
-        summaryStats.innerHTML = `Showing <strong>${currentFiltered.length}</strong> records across <strong>${participatingWorkerIds.size}</strong> workers | Period Overtime: <strong>${totalHours.toFixed(1)}h</strong> (Approved: <strong style="color:var(--success);">${approvedHours.toFixed(1)}h</strong>)${periodLabel}`;
+        summaryStats.innerHTML = `Showing <strong>${currentFiltered.length}</strong> records across <strong>${participatingWorkerIds.size}</strong> workers | Period Overtime: <strong>${totalHours.toFixed(1)}h</strong> (Completed: <strong style="color:var(--success);">${completedHours.toFixed(1)}h</strong>, Active: <strong style="color:var(--primary);">${approvedHours.toFixed(1)}h</strong>)${periodLabel}`;
 
         if (currentFiltered.length === 0) {
             reportRows.innerHTML = `
@@ -1246,13 +1273,15 @@ export function renderAdminReport(container) {
                 const workersList = allWorkerIds.map(id => db.getUser(id) || { id, name: id, position: 'Staff', email: '' });
 
                 let statusBadge = '';
-                if (r.status === 'Approved') statusBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                if (r.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+                else if (r.status === 'Approved') statusBadge = `<span class="badge badge-pending" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Approved (Active)</span>`;
                 else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
                 else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
                 else statusBadge = `<span class="badge badge-pending">Pending</span>`;
 
-                const startDisplay = formatDateTime(r.startDate || r.dateStart);
-                const endDisplay = formatDateTime(r.endDate || r.dateEnd || r.startDate);
+                const startDisplay = formatDateTime(r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart));
+                const endDisplay = formatDateTime(r.status === 'Completed' && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd || r.startDate));
+                const durVal = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
 
                 return `
                     <tr class="rep-main-row" data-id="${r.id}" style="cursor: pointer;">
@@ -1269,9 +1298,15 @@ export function renderAdminReport(container) {
                         <td style="font-weight: 500;">${projectName}</td>
                         <td style="font-size: 0.78rem; color: var(--text-main); white-space: nowrap;">${startDisplay}</td>
                         <td style="font-size: 0.78rem; color: var(--text-main); white-space: nowrap;">${endDisplay}</td>
-                        <td style="font-weight: 700; color: var(--primary); font-size: 0.84rem;">${Number(r.duration).toFixed(1)} hrs</td>
+                        <td style="font-weight: 700; color: var(--primary); font-size: 0.84rem;">
+                            ${durVal.toFixed(1)} hrs
+                            ${r.status === 'Completed' ? `<span style="font-size:0.68rem; color:var(--text-muted); font-weight:normal; display:block;">(actual)</span>` : ''}
+                        </td>
                         <td>${statusBadge}</td>
-                        <td style="text-align: right;">
+                        <td style="text-align: right; white-space: nowrap;">
+                            ${r.status === 'Approved' ? `
+                                <button class="btn btn-success btn-sm rep-close-ot-btn" data-id="${r.id}" style="padding: 2px 7px; font-size: 0.72rem; font-weight: 700; margin-right: 4px;">Close OT</button>
+                            ` : ''}
                             <button class="btn btn-secondary btn-sm rep-view-details-btn" data-id="${r.id}" style="padding: 3px 8px; font-size: 0.72rem;">View Details</button>
                         </td>
                     </tr>
@@ -1295,13 +1330,35 @@ export function renderAdminReport(container) {
                                         }).join('')}
                                     </div>
 
+                                    ${r.status === 'Completed' ? `
+                                        <div style="margin-top: 10px; padding: 8px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.78rem;">
+                                            <div style="font-weight: 700; color: #065f46; margin-bottom: 2px;">Actual Overtime Timesheet (Closed):</div>
+                                            <div style="color: #047857;">
+                                                Actual Range: <strong>${formatDateTime(r.actualStartDate || r.startDate)}</strong> &rarr; <strong>${formatDateTime(r.actualEndDate || r.endDate)}</strong>
+                                                &bull; Gross: <strong>${Number(r.actualGrossDuration || r.grossDuration || r.duration || 0).toFixed(1)}h</strong>
+                                                ${Number(r.actualRestDeduction || 0) > 0 ? `&bull; Rest Break: <strong>-${Number(r.actualRestDeduction).toFixed(1)}h</strong>` : ''}
+                                                &bull; Net Claimable: <strong>${Number(r.actualDuration || r.duration || 0).toFixed(1)}h</strong>
+                                            </div>
+                                            ${r.closingRemarks ? `
+                                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #a7f3d0; color: #065f46;">
+                                                    <strong>Closing Remarks:</strong> "${r.closingRemarks}"
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    ` : ''}
+
                                     ${r.targetWork || r.target_work ? `
                                         <div style="margin-top: 8px; font-size: 0.78rem; color: var(--text-muted);">
                                             <strong>Target Deliverables:</strong> ${r.targetWork || r.target_work}
                                         </div>
                                     ` : ''}
                                 </div>
-                                <div>
+                                <div style="display: flex; gap: 6px;">
+                                    ${r.status === 'Approved' ? `
+                                        <button class="btn btn-success btn-sm rep-subrow-close-btn" data-id="${r.id}" style="padding: 4px 10px; font-size: 0.74rem; font-weight: 700;">
+                                            Close OT Shift
+                                        </button>
+                                    ` : ''}
                                     <button class="btn btn-primary btn-sm rep-modal-btn" data-id="${r.id}" style="padding: 4px 10px; font-size: 0.74rem;">
                                         Open Full Request
                                     </button>
@@ -1319,6 +1376,13 @@ export function renderAdminReport(container) {
                     const reqId = row.dataset.id;
                     if (reqId && window.openRequestReviewModal) {
                         window.openRequestReviewModal(reqId);
+                    }
+                    return;
+                }
+                if (e.target.closest('.rep-close-ot-btn')) {
+                    const reqId = e.target.closest('.rep-close-ot-btn').dataset.id;
+                    if (reqId && window.openCloseOTModal) {
+                        window.openCloseOTModal(reqId, () => loadReport());
                     }
                     return;
                 }
@@ -1343,6 +1407,16 @@ export function renderAdminReport(container) {
             };
         });
 
+        reportRows.querySelectorAll('.rep-subrow-close-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const reqId = btn.dataset.id;
+                if (reqId && window.openCloseOTModal) {
+                    window.openCloseOTModal(reqId, () => loadReport());
+                }
+            };
+        });
+
         if (participatingWorkerIds.size === 0) {
             reportWorkersContainer.innerHTML = `
                 <div class="empty-state" style="padding: 32px; text-align: center; color: var(--text-muted); background: #ffffff; border-radius: 8px; border: 1px solid var(--border-color);">
@@ -1360,12 +1434,18 @@ export function renderAdminReport(container) {
                     r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId))
                 );
 
-                const workerPeriodHours = workerShifts.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+                const workerPeriodHours = workerShifts.reduce((acc, r) => {
+                    const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                    return acc + (isNaN(h) ? 0 : h);
+                }, 0);
                 
-                const workerAllApproved = allReqs.filter(r => 
-                    r.status === 'Approved' && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
+                const workerAllAuthorized = allReqs.filter(r => 
+                    (r.status === 'Approved' || r.status === 'Completed') && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
                 );
-                const totalAccruedMonth = workerAllApproved.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+                const totalAccruedMonth = workerAllAuthorized.reduce((acc, r) => {
+                    const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                    return acc + (isNaN(h) ? 0 : h);
+                }, 0);
                 const pct = monthlyMax > 0 ? Math.min(100, Math.round((totalAccruedMonth / monthlyMax) * 100)) : 0;
                 const progressColor = pct >= 90 ? 'var(--danger)' : (pct >= 70 ? 'var(--warning)' : 'var(--success)');
 
@@ -1422,21 +1502,27 @@ export function renderAdminReport(container) {
                                         ${workerShifts.map(ws => {
                                             const pObj = db.getProject(ws.project);
                                             const pName = pObj ? pObj.name : (ws.project || 'Project');
-                                            const sObj = new Date(ws.startDate || ws.dateStart);
-                                            const eObj = new Date(ws.endDate || ws.dateEnd || ws.startDate);
-                                            const dateOnly = formatDateOnly(ws.startDate || ws.dateStart);
-                                            const sTime = !isNaN(sObj.getTime()) ? sObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : ws.timeStart || '-';
-                                            const eTime = !isNaN(eObj.getTime()) ? eObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : ws.timeEnd || '-';
-                                            let st = ws.status === 'Approved' ? '✅ Approved' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending');
+                                            const isDone = ws.status === 'Completed';
+                                            const sObj = new Date(isDone && ws.actualStartDate ? ws.actualStartDate : (ws.startDate || ws.dateStart));
+                                            const eObj = new Date(isDone && ws.actualEndDate ? ws.actualEndDate : (ws.endDate || ws.dateEnd || ws.startDate));
+                                            const dateOnly = formatDateOnly(isDone && ws.actualStartDate ? ws.actualStartDate : (ws.startDate || ws.dateStart));
+                                            const sTime = !isNaN(sObj.getTime()) ? sObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : (ws.actualTimeStart || ws.timeStart || '-');
+                                            const eTime = !isNaN(eObj.getTime()) ? eObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : (ws.actualTimeEnd || ws.timeEnd || '-');
+                                            
+                                            const grossH = Number(isDone && ws.actualGrossDuration != null ? ws.actualGrossDuration : (ws.grossDuration || ws.duration || 0));
+                                            const restH = Number(isDone && ws.actualRestDeduction != null ? ws.actualRestDeduction : (ws.restDeduction || 0));
+                                            const netH = Number(isDone && ws.actualDuration != null ? ws.actualDuration : (ws.duration || 0));
+
+                                            let st = isDone ? '✅ Completed' : (ws.status === 'Approved' ? '⚡ Active' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending'));
                                             return `
                                                 <tr>
                                                     <td style="padding: 5px 8px; font-weight: 600;">${dateOnly}</td>
                                                     <td style="padding: 5px 8px;">${sTime}</td>
                                                     <td style="padding: 5px 8px;">${eTime}</td>
                                                     <td style="padding: 5px 8px;">${pName}</td>
-                                                    <td style="padding: 5px 8px; color: var(--text-muted);">${Number(ws.grossDuration || ws.duration || 0).toFixed(1)}h</td>
-                                                    <td style="padding: 5px 8px;">-${Number(ws.restDeduction || 0).toFixed(1)}h</td>
-                                                    <td style="padding: 5px 8px; font-weight: 700; color: var(--primary);">${Number(ws.duration || 0).toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px; color: var(--text-muted);">${grossH.toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px;">-${restH.toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px; font-weight: 700; color: var(--primary);">${netH.toFixed(1)}h</td>
                                                     <td style="padding: 5px 8px;">${st}</td>
                                                 </tr>
                                             `;
@@ -1486,16 +1572,24 @@ export function renderAdminReport(container) {
         if (currentFiltered.length === 0) { showToast("No data.", "error"); return; }
         const data = currentFiltered.map(r => {
             const requester = db.getUser(r.requesterId);
+            const isDone = r.status === 'Completed';
+            const sDate = isDone && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart);
+            const eDate = isDone && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd || r.startDate);
+            const gross = Number(isDone && r.actualGrossDuration != null ? r.actualGrossDuration : (r.grossDuration || r.duration || 0));
+            const rest = Number(isDone && r.actualRestDeduction != null ? r.actualRestDeduction : (r.restDeduction || 0));
+            const net = Number(isDone && r.actualDuration != null ? r.actualDuration : (r.duration || 0));
+
             return {
                 "OT ID": r.id,
                 "Requestor": requester ? requester.name : r.requesterId,
                 "Project": db.getProject(r.project)?.name || r.project,
-                "Start Date": formatDateOnly(r.startDate || r.dateStart),
-                "End Date": formatDateOnly(r.endDate || r.dateEnd || r.startDate),
-                "Gross Hours": Number(r.grossDuration || r.duration || 0),
-                "Rest Deduction": Number(r.restDeduction || 0),
-                "Net Claimable OT Hours": Number(r.duration || 0),
-                "Status": r.status
+                "Start Date & Time": formatDateTime(sDate),
+                "End Date & Time": formatDateTime(eDate),
+                "Gross Hours": gross,
+                "Rest Deduction": rest,
+                "Net Claimable OT Hours": net,
+                "Status": r.status,
+                "Closing Remarks": r.closingRemarks || ''
             };
         });
         if (window.XLSX) {

@@ -7,14 +7,19 @@ export function renderWorkerView(container, workerId) {
         r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId))
     );
 
-    const approvedRequests = workerRequests.filter(r => r.status === 'Approved');
+    const completedRequests = workerRequests.filter(r => r.status === 'Completed');
+    const activeApprovedRequests = workerRequests.filter(r => r.status === 'Approved');
     const pendingRequests = workerRequests.filter(r => r.status === 'Pending Approval' || r.status === 'Pending Worker Consent');
-    const totalApprovedHours = approvedRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+    
+    // Completed hours count as official recorded hours
+    const totalRecordedHours = completedRequests.reduce((acc, r) => acc + (Number(r.actualDuration != null ? r.actualDuration : r.duration) || 0), 0);
+    const totalPlannedApprovedHours = activeApprovedRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+    const totalAuthorizedHours = totalRecordedHours + totalPlannedApprovedHours;
 
     const limits = db.getWorkerLimits(workerId);
     const monthlyMax = limits.monthlyMax || 104;
-    const remainingHours = Math.max(0, monthlyMax - totalApprovedHours);
-    const percentage = monthlyMax > 0 ? Math.min(100, Math.round((totalApprovedHours / monthlyMax) * 100)) : 0;
+    const remainingHours = Math.max(0, monthlyMax - totalAuthorizedHours);
+    const percentage = monthlyMax > 0 ? Math.min(100, Math.round((totalAuthorizedHours / monthlyMax) * 100)) : 0;
     const progressColor = percentage >= 90 ? 'var(--danger)' : (percentage >= 70 ? 'var(--warning)' : 'var(--success)');
 
     // Available years for filter
@@ -34,6 +39,57 @@ export function renderWorkerView(container, workerId) {
         "July", "August", "September", "October", "November", "December"
     ];
 
+    let activeApprovedHtml = '';
+    if (activeApprovedRequests.length > 0) {
+        activeApprovedHtml = `
+            <!-- Active Overtime (Awaiting Work Completion & Closeout) -->
+            <div class="card glass-panel" style="margin-bottom: 20px; border-left: 4px solid var(--primary); background: #f0fdf4;">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <div>
+                        <h2 class="card-title" style="font-size: 1.05rem; color: #166534;">
+                            ${icons.check} Active Overtime Shifts (Awaiting Closeout)
+                        </h2>
+                        <p style="font-size: 0.8rem; color: #15803d; margin-top: 2px;">
+                            These shifts are approved. When work is finished, submit actual hours to finalize into official records.
+                        </p>
+                    </div>
+                    <span class="badge badge-approved" style="font-size: 0.74rem;">${activeApprovedRequests.length} Active</span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${activeApprovedRequests.map(r => {
+                        const proj = db.getProject(r.project);
+                        const pName = proj ? proj.name : (r.project || 'Project');
+                        return `
+                            <div class="mobile-shift-card" style="margin-bottom: 0; background: #ffffff; border: 1px solid #bbf7d0; padding: 12px 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <strong style="color: var(--primary); font-size: 0.95rem;">${pName}</strong>
+                                            <span class="badge badge-approved" style="font-size: 0.68rem;">${r.id}</span>
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                                            Schedule: <strong>${formatDateTime(r.startDate || r.dateStart)}</strong> &rarr; <strong>${formatDateTime(r.endDate || r.dateEnd)}</strong>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Scheduled</div>
+                                            <div style="font-weight: 800; font-size: 1.05rem; color: var(--primary);">${Number(r.duration || 0).toFixed(1)}h</div>
+                                        </div>
+                                        <button class="btn btn-success btn-sm btn-worker-close-ot" data-id="${r.id}" style="padding: 6px 14px; font-weight: 700; font-size: 0.78rem;">
+                                            Close OT &amp; Submit Actuals
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     container.innerHTML = `
         <!-- Overtime Compliance & Limit KPI Cards -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -44,7 +100,7 @@ export function renderWorkerView(container, workerId) {
                     <span class="badge ${percentage >= 90 ? 'badge-rejected' : (percentage >= 70 ? 'badge-pending' : 'badge-approved')}" style="font-size: 0.75rem;">${percentage}%</span>
                 </div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: var(--text-main); margin-top: 6px;">
-                    ${totalApprovedHours.toFixed(1)} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">/ ${monthlyMax}h</span>
+                    ${totalAuthorizedHours.toFixed(1)} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">/ ${monthlyMax}h</span>
                 </div>
                 <!-- Progress Bar -->
                 <div style="background: rgba(226, 232, 240, 0.8); height: 6px; border-radius: 99px; margin-top: 10px; overflow: hidden;">
@@ -55,20 +111,20 @@ export function renderWorkerView(container, workerId) {
                 </div>
             </div>
 
-            <!-- Approved Hours -->
+            <!-- Official Closed/Completed Hours -->
             <div class="card glass-panel" style="margin-bottom: 0; padding: 20px; border-left: 4px solid var(--success);">
-                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Approved Overtime</div>
+                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Completed OT Records</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: var(--success); margin-top: 6px;">
-                    ${totalApprovedHours.toFixed(1)} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">hrs</span>
+                    ${totalRecordedHours.toFixed(1)} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">hrs</span>
                 </div>
                 <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">
-                    ${approvedRequests.length} approved shifts
+                    ${completedRequests.length} closed &amp; recorded shifts
                 </div>
             </div>
 
             <!-- Pending Review Queue -->
             <div class="card glass-panel" style="margin-bottom: 0; padding: 20px; border-left: 4px solid var(--warning);">
-                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Pending Requests</div>
+                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Pending Approval</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #f59e0b; margin-top: 6px;">
                     ${pendingRequests.length}
                 </div>
@@ -88,6 +144,8 @@ export function renderWorkerView(container, workerId) {
                 </div>
             </div>
         </div>
+
+        ${activeApprovedHtml}
 
         <!-- Overtime Analytics & Trends Section -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 20px; margin-bottom: 24px;">
@@ -135,9 +193,9 @@ export function renderWorkerView(container, workerId) {
         <div class="card glass-panel" style="margin-bottom: 0;">
             <div class="card-header" style="margin-bottom: 16px;">
                 <div>
-                    <h2 class="card-title">${icons.history} Personal Overtime Log</h2>
+                    <h2 class="card-title">${icons.history} Personal Overtime Records</h2>
                     <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
-                        Track your overtime shifts and status. Click any row to view full details and approver remarks.
+                        Track your overtime shifts. Approved shifts require closing once work is done.
                     </p>
                 </div>
             </div>
@@ -145,9 +203,10 @@ export function renderWorkerView(container, workerId) {
             <!-- History Filters -->
             <div class="filter-bar" style="padding: 12px; gap: 12px; margin-bottom: 16px;">
                 <input type="text" id="filter-search" class="filter-input" placeholder="Search project, deliverables, ID..." style="flex-grow: 1;">
-                <select id="filter-status" class="filter-input" style="width: 140px;">
+                <select id="filter-status" class="filter-input" style="width: 150px;">
                     <option value="">All Statuses</option>
-                    <option value="Approved">Approved</option>
+                    <option value="Completed">Completed (Closed)</option>
+                    <option value="Approved">Approved (In Progress)</option>
                     <option value="Pending Approval">Pending Approval</option>
                     <option value="Pending Worker Consent">Pending Consent</option>
                     <option value="Rejected">Rejected</option>
@@ -160,9 +219,9 @@ export function renderWorkerView(container, workerId) {
                     <thead>
                         <tr>
                             <th>Project</th>
-                            <th>Start Date & Time</th>
-                            <th>End Date & Time</th>
-                            <th>Total Hours</th>
+                            <th>Start Schedule / Actual</th>
+                            <th>End Schedule / Actual</th>
+                            <th>Claimable Hours</th>
                             <th>Status</th>
                             <th style="text-align: right;">Action</th>
                         </tr>
@@ -401,7 +460,8 @@ export function renderWorkerView(container, workerId) {
 
         historyTbody.innerHTML = filtered.map(r => {
             let statusBadge = '';
-            if (r.status === 'Approved') statusBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+            if (r.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+            else if (r.status === 'Approved') statusBadge = `<span class="badge badge-pending" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Approved (Active)</span>`;
             else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
             else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
             else statusBadge = `<span class="badge badge-pending">Pending</span>`;
@@ -409,33 +469,63 @@ export function renderWorkerView(container, workerId) {
             const project = db.getProject(r.project);
             const projectName = project ? project.name : (r.project || 'Project');
 
+            const sDate = r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart);
+            const eDate = r.status === 'Completed' && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd);
+            const durationDisplay = r.status === 'Completed' && r.actualDuration != null 
+                ? `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`
+                : `${Number(r.duration).toFixed(1)} hrs`;
+
+            const isRequester = r.requesterId === workerId;
+            const canClose = r.status === 'Approved' && isRequester;
+
             return `
                 <tr class="worker-ot-row" data-id="${r.id}" style="cursor: pointer;">
                     <td>
-                        <div style="font-weight: 700; color: var(--text-main);">${projectName}</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">${r.id}</div>
+                        <div style="font-weight: 700; color: var(--text-main); font-size: 0.85rem;">${projectName}</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted);">${r.id}</div>
                     </td>
-                    <td style="font-size: 0.85rem; color: var(--text-main); white-space: nowrap;">${formatDateTime(r.startDate || r.dateStart)}</td>
-                    <td style="font-size: 0.85rem; color: var(--text-main); white-space: nowrap;">${formatDateTime(r.endDate || r.dateEnd)}</td>
-                    <td style="font-weight: 700; color: var(--primary);">${Number(r.duration).toFixed(1)} hrs</td>
+                    <td style="font-size: 0.82rem; color: var(--text-main); white-space: nowrap;">${formatDateTime(sDate)}</td>
+                    <td style="font-size: 0.82rem; color: var(--text-main); white-space: nowrap;">${formatDateTime(eDate)}</td>
+                    <td style="font-weight: 700; color: var(--primary); font-size: 0.84rem;">${durationDisplay}</td>
                     <td>${statusBadge}</td>
-                    <td style="text-align: right;">
-                        <button class="btn btn-secondary btn-sm worker-view-btn" data-id="${r.id}" style="padding: 4px 10px; font-size: 0.78rem;">View Details</button>
+                    <td style="text-align: right; white-space: nowrap;">
+                        ${canClose ? `
+                            <button class="btn btn-success btn-sm worker-close-btn" data-id="${r.id}" style="padding: 3px 8px; font-size: 0.72rem; font-weight: 700; margin-right: 4px;">Close OT</button>
+                        ` : ''}
+                        <button class="btn btn-secondary btn-sm worker-view-btn" data-id="${r.id}" style="padding: 3px 8px; font-size: 0.72rem;">View</button>
                     </td>
                 </tr>
             `;
         }).join('');
 
         // Attach click listeners to rows & view buttons
-        historyTbody.querySelectorAll('.worker-ot-row, .worker-view-btn').forEach(elem => {
-            elem.onclick = () => {
-                const reqId = elem.dataset.id || elem.closest('.worker-ot-row')?.dataset.id;
+        historyTbody.querySelectorAll('.worker-ot-row').forEach(row => {
+            row.onclick = (e) => {
+                if (e.target.closest('.worker-close-btn')) {
+                    const reqId = e.target.closest('.worker-close-btn').dataset.id;
+                    if (reqId && window.openCloseOTModal) {
+                        window.openCloseOTModal(reqId, () => renderWorkerView(container, workerId));
+                    }
+                    return;
+                }
+
+                const reqId = row.dataset.id;
                 if (reqId && window.openRequestReviewModal) {
                     window.openRequestReviewModal(reqId);
                 }
             };
         });
     };
+
+    // Attach listeners for top Active Overtime Close buttons
+    container.querySelectorAll('.btn-worker-close-ot').forEach(btn => {
+        btn.onclick = () => {
+            const reqId = btn.dataset.id;
+            if (reqId && window.openCloseOTModal) {
+                window.openCloseOTModal(reqId, () => renderWorkerView(container, workerId));
+            }
+        };
+    });
 
     filterSearch.oninput = loadHistory;
     filterStatus.onchange = loadHistory;
