@@ -29,36 +29,40 @@ export function renderAdminDashboard(container) {
     
     const totalApprovedHours = approvedRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
-    let pendingQueueHtml = '';
-    if (pendingRequests.length > 0) {
-        pendingQueueHtml = `
-            <!-- Pending Approvals Queue for Admin -->
-            <div class="card glass-panel" style="margin-bottom: 24px; border-left: 4px solid var(--warning);">
-                <div class="card-header" style="margin-bottom: 16px;">
-                    <div>
-                        <h2 class="card-title">${icons.hierarchy} Pending Approvals Queue</h2>
-                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
-                            Overtime requests awaiting manager or administrator decision.
-                        </p>
-                    </div>
-                    <span class="badge badge-pending">${pendingRequests.length} Pending</span>
+    let pendingQueueHtml = `
+        <!-- Pending Approvals Queue for Admin -->
+        <div class="card glass-panel" style="margin-bottom: 20px; border-left: 4px solid var(--warning);">
+            <div class="card-header" style="margin-bottom: 12px;">
+                <div>
+                    <h2 class="card-title">${icons.hierarchy} Pending Approvals Queue</h2>
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+                        Review, adjust, approve, or reject overtime requests across your organization.
+                    </p>
                 </div>
+                <span class="badge ${pendingRequests.length > 0 ? 'badge-pending' : 'badge-approved'}">${pendingRequests.length} Pending</span>
+            </div>
 
-                <div style="display: flex; flex-direction: column; gap: 14px;" id="admin-pending-list">
+            ${pendingRequests.length === 0 ? `
+                <div class="empty-state" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                    ${icons.check}
+                    <div style="margin-top: 8px; font-weight: 500; font-size: 0.88rem;">No pending overtime requests to review. All caught up!</div>
+                </div>
+            ` : `
+                <div style="display: flex; flex-direction: column; gap: 12px;" id="admin-pending-list">
                     ${pendingRequests.map(r => {
                         const worker = db.getUser(r.requesterId);
                         const project = db.getProject(r.project);
                         const teamNames = r.teamMembers && r.teamMembers.length > 0
                             ? r.teamMembers.map(tid => db.getUser(tid)?.name || tid).join(', ')
                             : 'None';
-                        const specialBadge = r.isSpecialRequest ? `<span class="badge badge-special" style="margin-left: 8px;">Special Request (Consent Provided)</span>` : '';
+                        const specialBadge = r.isSpecialRequest ? `<span class="badge badge-special" style="margin-left: 8px;">Special Request</span>` : '';
 
                         return `
                             <div class="mobile-shift-card">
                                 <div class="mobile-shift-header">
                                     <div>
                                         <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:var(--primary); margin-bottom:2px;">Requested by:</div>
-                                        <div style="font-weight:700; font-size:1.05rem; color:var(--text-main);">
+                                        <div style="font-weight:700; font-size:1.02rem; color:var(--text-main);">
                                             ${worker ? worker.name : r.requesterId}
                                             ${specialBadge}
                                         </div>
@@ -69,13 +73,13 @@ export function renderAdminDashboard(container) {
                                     <div style="font-size: 1.1rem; font-weight:700; color:var(--primary);">${Number(r.duration || 0).toFixed(1)} hrs</div>
                                 </div>
 
-                                <div style="font-size:0.86rem; line-height:1.4; color:var(--text-main);">
+                                <div style="font-size:0.84rem; line-height:1.4; color:var(--text-main);">
                                     <div><strong>Regular Progress:</strong> ${r.workProgress || r.work_progress || 'N/A'}</div>
                                     <div style="margin-top:4px;"><strong>Target:</strong> ${r.targetWork || r.target_work || 'N/A'}</div>
-                                    ${teamNames !== 'None' ? `<div style="margin-top:4px; font-size:0.8rem; color:var(--text-muted);"><strong>Team:</strong> ${teamNames}</div>` : ''}
+                                    ${teamNames !== 'None' ? `<div style="margin-top:4px; font-size:0.78rem; color:var(--text-muted);"><strong>Team:</strong> ${teamNames}</div>` : ''}
                                 </div>
 
-                                <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px solid var(--border-color); padding-top:8px; margin-top:4px;">
+                                <div style="font-size:0.78rem; color:var(--text-muted); border-top:1px solid var(--border-color); padding-top:6px; margin-top:4px;">
                                     <div>Schedule: <strong>${formatDateTime(r.startDate)}</strong> to <strong>${formatDateTime(r.endDate)}</strong></div>
                                 </div>
 
@@ -88,14 +92,15 @@ export function renderAdminDashboard(container) {
                         `;
                     }).join('')}
                 </div>
-            </div>
-        `;
-    }
+            `}
+        </div>
+    `;
 
     // Current user personal monthly limit calculation
-    const myApproved = requests.filter(r => 
-        r.status === 'Approved' && (r.requesterId === currentUserId || (r.teamMembers && r.teamMembers.includes(currentUserId)))
+    const myAllRequests = requests.filter(r => 
+        r.requesterId === currentUserId || (r.teamMembers && r.teamMembers.includes(currentUserId))
     );
+    const myApproved = myAllRequests.filter(r => r.status === 'Approved');
     const myApprovedHours = myApproved.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
     const myLimits = currentUserId ? db.getWorkerLimits(currentUserId) : { monthlyMax: 104 };
     const myMonthlyMax = myLimits.monthlyMax || 104;
@@ -204,6 +209,48 @@ export function renderAdminDashboard(container) {
                     <canvas id="canvas-yearly-trend"></canvas>
                 </div>
             </div>
+        </div>
+
+        <!-- My Personal Overtime Sessions & Requests -->
+        <div class="card glass-panel" style="margin-top: 20px; margin-bottom: 0;">
+            <div class="card-header" style="margin-bottom: 12px;">
+                <div>
+                    <h2 class="card-title">${icons.assignment} My Personal Overtime Sessions & Requests</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                        Overtime shifts requested by you or where you are participating.
+                    </p>
+                </div>
+                <span class="badge badge-info">${myAllRequests.length} Total</span>
+            </div>
+            ${myAllRequests.length === 0 ? `
+                <div class="empty-state" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                    ${icons.info}
+                    <div style="margin-top: 8px; font-weight: 500; font-size: 0.86rem;">You have not submitted or been assigned to any overtime sessions yet.</div>
+                </div>
+            ` : `
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${myAllRequests.map(r => {
+                        const proj = db.getProject(r.project);
+                        const pName = proj ? proj.name : (r.project || 'General');
+                        let stBadge = `<span class="badge badge-pending">Pending</span>`;
+                        if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                        else if (r.status === 'Rejected') stBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
+                        
+                        return `
+                            <div class="mobile-shift-card" style="margin-bottom: 0; padding: 10px 12px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <strong style="color: var(--primary); font-size: 0.88rem;">${r.id} &bull; ${pName}</strong>
+                                    <div>${stBadge}</div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted);">
+                                    <span>${formatDateTime(r.startDate || r.dateStart)}</span>
+                                    <strong style="color: var(--text-main); font-size: 0.84rem;">${Number(r.duration || 0).toFixed(1)} hrs</strong>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
         </div>
     `;
 
@@ -710,18 +757,25 @@ export function renderAdminRequest(container) {
         const timeEnd = timeEndInput.value;
 
         const currentUser = db.getCurrentUser();
-        const isSuperiorOrAdmin = currentUser && (currentUser.role === 'superior' || currentUser.role === 'admin');
+        const isAdmin = currentUser && currentUser.role === 'admin';
         const primaryWorkerId = (currentUser && selectedWorkerIds.includes(currentUser.id)) ? currentUser.id : selectedWorkerIds[0];
         const teamMembers = selectedWorkerIds.filter(id => id !== primaryWorkerId);
         const approverId = db.getApproverForWorker(primaryWorkerId);
 
-        // If requested by a Superior or Admin, it is directly approved because the manager has the authority
-        // If requested by a regular worker, it goes to 'Pending Approval' for superior review
+        // Approval Routing:
+        // 1. If Admin themselves schedules and has no higher approver -> 'Approved'
+        // 2. If requester exceeds compliance cap -> 'Pending Worker Consent'
+        // 3. If requester has an assigned approver in hierarchy (e.g. Superior assigned to Admin) -> 'Pending Approval'
+        // 4. If no approver mapped -> 'Approved'
         let initialStatus = 'Pending Approval';
-        if (isSuperiorOrAdmin) {
+        if (isAdmin && (!approverId || approverId === currentUser.id)) {
             initialStatus = 'Approved';
         } else if (isOverLimit) {
             initialStatus = 'Pending Worker Consent';
+        } else if (approverId && approverId !== (currentUser ? currentUser.id : null)) {
+            initialStatus = 'Pending Approval';
+        } else if (!approverId) {
+            initialStatus = 'Approved';
         }
 
         const reqData = {
