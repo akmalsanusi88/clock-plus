@@ -833,110 +833,140 @@ export function renderAdminReport(container) {
 
     let selectedEmployeeId = '';
     let selectedProjectId = '';
+    let activeReportTab = 'details';
+
+    const now = new Date();
+    const curYear = now.getFullYear();
+    const curMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const firstDay = `${curYear}-${curMonth}-01`;
+    const lastDayObj = new Date(curYear, now.getMonth() + 1, 0);
+    const lastDay = `${curYear}-${curMonth}-${String(lastDayObj.getDate()).padStart(2, '0')}`;
 
     container.innerHTML = `
         <div class="card glass-panel" style="margin-bottom: 0;">
-            <div class="card-header" style="margin-bottom: 16px;">
+            <div class="card-header" style="margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
                 <div>
                     <h2 class="card-title">${icons.reports} Overtime Timesheets & Compliance Reports</h2>
-                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
-                        Filter, inspect, and export overtime timesheet reports in Excel (.xlsx) or PDF.
+                    <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+                        Filter, monitor worker hours, and export overtime timesheets in Excel (.xlsx) or PDF.
                     </p>
                 </div>
-                <div style="display: flex; gap: 10px;">
-                    <button class="btn btn-secondary btn-sm" id="btn-export-excel" style="display: flex; align-items: center; gap: 6px;">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-secondary btn-sm" id="btn-export-excel" style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                         Export Excel
                     </button>
-                    <button class="btn btn-primary btn-sm" id="btn-export-pdf" style="display: flex; align-items: center; gap: 6px;">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                    <button class="btn btn-primary btn-sm" id="btn-export-pdf" style="display: flex; align-items: center; gap: 6px; font-size: 0.78rem;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
                         Export PDF
                     </button>
                 </div>
             </div>
 
-            <!-- Report Filter Bar -->
-            <div class="filter-bar" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; padding: 14px;">
-                <!-- 1. Employee Searchable Dropdown -->
-                <div class="filter-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">Employee:</label>
-                    <div class="searchable-select-container" id="rep-employee-container">
-                        <button type="button" class="searchable-select-trigger" id="rep-employee-trigger">
-                            <span id="rep-employee-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;">All Employees</span>
-                            <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 6px;">▼</span>
-                        </button>
-                        <div class="searchable-select-popover" id="rep-employee-popover">
-                            <input type="text" class="searchable-select-search" id="rep-employee-search" placeholder="Search employee by name...">
-                            <div class="searchable-select-options" id="rep-employee-options"></div>
+            <div class="filter-bar" style="display: flex; flex-direction: column; gap: 10px; padding: 12px; border-radius: 10px; background: #f8fafc; border: 1px solid var(--border-color);">
+                <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;">
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Employee:</label>
+                        <div class="searchable-select-container" id="rep-employee-container">
+                            <button type="button" class="searchable-select-trigger" id="rep-employee-trigger" style="height: 34px; padding: 0 10px; font-size: 0.8rem;">
+                                <span id="rep-employee-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;">All Employees</span>
+                                <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 6px;">▼</span>
+                            </button>
+                            <div class="searchable-select-popover" id="rep-employee-popover">
+                                <input type="text" class="searchable-select-search" id="rep-employee-search" placeholder="Search employee...">
+                                <div class="searchable-select-options" id="rep-employee-options"></div>
+                            </div>
                         </div>
+                    </div>
+
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Project:</label>
+                        <div class="searchable-select-container" id="rep-project-container">
+                            <button type="button" class="searchable-select-trigger" id="rep-project-trigger" style="height: 34px; padding: 0 10px; font-size: 0.8rem;">
+                                <span id="rep-project-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 130px;">All Projects</span>
+                                <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 6px;">▼</span>
+                            </button>
+                            <div class="searchable-select-popover" id="rep-project-popover">
+                                <input type="text" class="searchable-select-search" id="rep-project-search" placeholder="Search project...">
+                                <div class="searchable-select-options" id="rep-project-options"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <label for="rep-filter-status" style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Status:</label>
+                        <select id="rep-filter-status" class="filter-input" style="min-width: 120px; height: 34px; font-size: 0.8rem; padding: 0 8px;">
+                            <option value="">All Statuses</option>
+                            <option value="Approved">Approved</option>
+                            <option value="Pending Approval">Pending Approval</option>
+                            <option value="Pending Worker Consent">Pending Consent</option>
+                            <option value="Rejected">Rejected</option>
+                        </select>
+                    </div>
+
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <label for="rep-filter-date-from" style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Period From:</label>
+                        <input type="date" id="rep-filter-date-from" value="${firstDay}" class="filter-input" style="height: 34px; font-size: 0.8rem; padding: 0 6px;">
+                    </div>
+
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <label for="rep-filter-date-to" style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Period To:</label>
+                        <input type="date" id="rep-filter-date-to" value="${lastDay}" class="filter-input" style="height: 34px; font-size: 0.8rem; padding: 0 6px;">
+                    </div>
+
+                    <div class="filter-group" style="margin-bottom: 0;">
+                        <button type="button" class="btn btn-secondary btn-sm" id="rep-btn-reset-filters" style="height: 34px; padding: 0 12px; font-size: 0.76rem;">Reset</button>
                     </div>
                 </div>
 
-                <!-- 2. Project Searchable Dropdown -->
-                <div class="filter-group" style="margin-bottom: 0;">
-                    <label style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">Project:</label>
-                    <div class="searchable-select-container" id="rep-project-container">
-                        <button type="button" class="searchable-select-trigger" id="rep-project-trigger">
-                            <span id="rep-project-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;">All Projects</span>
-                            <span style="font-size: 0.7rem; color: var(--text-muted); margin-left: 6px;">▼</span>
-                        </button>
-                        <div class="searchable-select-popover" id="rep-project-popover">
-                            <input type="text" class="searchable-select-search" id="rep-project-search" placeholder="Search project name...">
-                            <div class="searchable-select-options" id="rep-project-options"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- 3. Status Filter -->
-                <div class="filter-group" style="margin-bottom: 0;">
-                    <label for="rep-filter-status" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">Status:</label>
-                    <select id="rep-filter-status" class="filter-input" style="min-width: 130px; height: 38px;">
-                        <option value="">All Statuses</option>
-                        <option value="Approved">Approved</option>
-                        <option value="Pending Approval">Pending Approval</option>
-                        <option value="Pending Worker Consent">Pending Consent</option>
-                        <option value="Rejected">Rejected</option>
-                    </select>
-                </div>
-
-                <!-- 4. Single Date Filter -->
-                <div class="filter-group" style="margin-bottom: 0;">
-                    <label for="rep-filter-date" style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); margin-bottom: 4px; display: block;">Date:</label>
-                    <input type="date" id="rep-filter-date" class="filter-input" style="height: 38px;">
-                </div>
-
-                <!-- Reset Filters Button -->
-                <div class="filter-group" style="margin-bottom: 0;">
-                    <button type="button" class="btn btn-secondary btn-sm" id="rep-btn-reset-filters" style="height: 38px; padding: 0 14px;">Reset</button>
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap; border-top: 1px solid var(--border-color); padding-top: 8px;">
+                    <span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 600; margin-right: 2px;">Quick Periods:</span>
+                    <button type="button" class="btn btn-secondary btn-sm rep-preset-btn" data-preset="this-month" style="font-size: 0.72rem; padding: 2px 8px; min-height: 24px; border-radius: 4px;">This Month</button>
+                    <button type="button" class="btn btn-secondary btn-sm rep-preset-btn" data-preset="1-10" style="font-size: 0.72rem; padding: 2px 8px; min-height: 24px; border-radius: 4px;">1st - 10th</button>
+                    <button type="button" class="btn btn-secondary btn-sm rep-preset-btn" data-preset="1-15" style="font-size: 0.72rem; padding: 2px 8px; min-height: 24px; border-radius: 4px;">1st - 15th</button>
+                    <button type="button" class="btn btn-secondary btn-sm rep-preset-btn" data-preset="16-end" style="font-size: 0.72rem; padding: 2px 8px; min-height: 24px; border-radius: 4px;">16th - End</button>
+                    <button type="button" class="btn btn-secondary btn-sm rep-preset-btn" data-preset="last-month" style="font-size: 0.72rem; padding: 2px 8px; min-height: 24px; border-radius: 4px;">Last Month</button>
+                    <button type="button" class="btn btn-secondary btn-sm rep-preset-btn" data-preset="all" style="font-size: 0.72rem; padding: 2px 8px; min-height: 24px; border-radius: 4px;">All Dates</button>
                 </div>
             </div>
 
-            <!-- Summary Stats for Filtered Data -->
-            <div id="report-summary-stats" style="margin-top: 14px; margin-bottom: 16px; font-size: 0.88rem; color: var(--text-muted); font-weight: 500;"></div>
+            <div style="display: flex; gap: 8px; margin-top: 14px; margin-bottom: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                <button type="button" class="btn btn-sm btn-primary" id="btn-rep-tab-details" style="font-size: 0.78rem; display: flex; align-items: center; gap: 6px;">
+                    ${icons.reports} Detailed Shift Log
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" id="btn-rep-tab-workers" style="font-size: 0.78rem; display: flex; align-items: center; gap: 6px;">
+                    ${icons.users} Worker Hours Monitoring
+                </button>
+            </div>
 
-            <!-- Table -->
-            <div class="table-container">
+            <div id="report-summary-stats" style="margin-top: 6px; margin-bottom: 12px; font-size: 0.82rem; color: var(--text-muted); font-weight: 500;"></div>
+
+            <div id="rep-details-view" class="table-container">
                 <table>
                     <thead>
                         <tr>
-                            <th style="width: 130px;">OT ID</th>
+                            <th style="width: 110px;">OT ID</th>
                             <th>Requestor</th>
                             <th>Project</th>
-                            <th>Date</th>
+                            <th>Start Date & Time</th>
+                            <th>End Date & Time</th>
                             <th>Total Hours</th>
                             <th>Status</th>
-                            <th style="text-align: right; width: 130px;">Action</th>
+                            <th style="text-align: right; width: 100px;">Action</th>
                         </tr>
                     </thead>
                     <tbody id="report-rows">
-                        <!-- Injected dynamically -->
                     </tbody>
                 </table>
+            </div>
+
+            <div id="rep-workers-view" style="display: none;">
+                <div id="report-workers-container" style="display: flex; flex-direction: column; gap: 10px;">
+                </div>
             </div>
         </div>
     `;
 
-    // Dropdown Elements
     const empTrigger = document.getElementById('rep-employee-trigger');
     const empPopover = document.getElementById('rep-employee-popover');
     const empSearchInput = document.getElementById('rep-employee-search');
@@ -950,16 +980,76 @@ export function renderAdminReport(container) {
     const projLabel = document.getElementById('rep-project-label');
 
     const filterStatus = document.getElementById('rep-filter-status');
-    const filterDate = document.getElementById('rep-filter-date');
+    const filterDateFrom = document.getElementById('rep-filter-date-from');
+    const filterDateTo = document.getElementById('rep-filter-date-to');
     const btnResetFilters = document.getElementById('rep-btn-reset-filters');
     const reportRows = document.getElementById('report-rows');
+    const reportWorkersContainer = document.getElementById('report-workers-container');
     const summaryStats = document.getElementById('report-summary-stats');
     const btnExportExcel = document.getElementById('btn-export-excel');
     const btnExportPDF = document.getElementById('btn-export-pdf');
 
+    const tabBtnDetails = document.getElementById('btn-rep-tab-details');
+    const tabBtnWorkers = document.getElementById('btn-rep-tab-workers');
+    const repDetailsView = document.getElementById('rep-details-view');
+    const repWorkersView = document.getElementById('rep-workers-view');
+
     let currentFiltered = [];
 
-    // 1. Employee Searchable Dropdown Handler
+    const setReportTab = (tab) => {
+        activeReportTab = tab;
+        if (tab === 'details') {
+            tabBtnDetails.className = 'btn btn-sm btn-primary';
+            tabBtnWorkers.className = 'btn btn-sm btn-secondary';
+            repDetailsView.style.display = 'block';
+            repWorkersView.style.display = 'none';
+        } else {
+            tabBtnDetails.className = 'btn btn-sm btn-secondary';
+            tabBtnWorkers.className = 'btn btn-sm btn-primary';
+            repDetailsView.style.display = 'none';
+            repWorkersView.style.display = 'block';
+        }
+    };
+
+    tabBtnDetails.onclick = () => setReportTab('details');
+    tabBtnWorkers.onclick = () => setReportTab('workers');
+
+    document.querySelectorAll('.rep-preset-btn').forEach(btn => {
+        btn.onclick = () => {
+            const preset = btn.dataset.preset;
+            const pNow = new Date();
+            const y = pNow.getFullYear();
+            const m = pNow.getMonth();
+
+            if (preset === 'this-month') {
+                filterDateFrom.value = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+                const endDay = new Date(y, m + 1, 0).getDate();
+                filterDateTo.value = `${y}-${String(m + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+            } else if (preset === '1-10') {
+                filterDateFrom.value = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+                filterDateTo.value = `${y}-${String(m + 1).padStart(2, '0')}-10`;
+            } else if (preset === '1-15') {
+                filterDateFrom.value = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+                filterDateTo.value = `${y}-${String(m + 1).padStart(2, '0')}-15`;
+            } else if (preset === '16-end') {
+                filterDateFrom.value = `${y}-${String(m + 1).padStart(2, '0')}-16`;
+                const endDay = new Date(y, m + 1, 0).getDate();
+                filterDateTo.value = `${y}-${String(m + 1).padStart(2, '0')}-${String(endDay).padStart(2, '0')}`;
+            } else if (preset === 'last-month') {
+                const prevMonth = new Date(y, m - 1, 1);
+                const py = prevMonth.getFullYear();
+                const pm = prevMonth.getMonth();
+                filterDateFrom.value = `${py}-${String(pm + 1).padStart(2, '0')}-01`;
+                const pEndDay = new Date(py, pm + 1, 0).getDate();
+                filterDateTo.value = `${py}-${String(pm + 1).padStart(2, '0')}-${String(pEndDay).padStart(2, '0')}`;
+            } else if (preset === 'all') {
+                filterDateFrom.value = '';
+                filterDateTo.value = '';
+            }
+            loadReport();
+        };
+    });
+
     const renderEmployeeOptions = (searchTerm = '') => {
         const term = searchTerm.toLowerCase().trim();
         const currentUsers = db.getUsers();
@@ -977,7 +1067,7 @@ export function renderAdminReport(container) {
             html += `
                 <div class="searchable-select-option ${selectedEmployeeId === u.id ? 'selected' : ''}" data-value="${u.id}">
                     <div style="font-weight: 600;">${u.name}</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">${u.position || 'Staff'}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">${u.position || 'Staff'}</div>
                 </div>
             `;
         });
@@ -1020,12 +1110,10 @@ export function renderAdminReport(container) {
         renderEmployeeOptions(empSearchInput.value);
     };
 
-    // 2. Project Searchable Dropdown Handler
     const renderProjectOptions = (searchTerm = '') => {
         const term = searchTerm.toLowerCase().trim();
-        const requestsList = db.getRequests();
-        const uniqueProjects = Array.from(new Set(requestsList.map(r => (db.getProject(r.project) || {}).name || r.project).filter(Boolean))).sort();
-        const filteredProjects = uniqueProjects.filter(p => !term || p.toLowerCase().includes(term));
+        const currentProjects = db.getProjects();
+        const filteredProjects = currentProjects.filter(p => !term || p.name.toLowerCase().includes(term));
 
         let html = `
             <div class="searchable-select-option ${selectedProjectId === '' ? 'selected' : ''}" data-value="">
@@ -1035,8 +1123,8 @@ export function renderAdminReport(container) {
 
         filteredProjects.forEach(p => {
             html += `
-                <div class="searchable-select-option ${selectedProjectId === p ? 'selected' : ''}" data-value="${p}">
-                    <div style="font-weight: 600;">${p}</div>
+                <div class="searchable-select-option ${selectedProjectId === p.id ? 'selected' : ''}" data-value="${p.id}">
+                    <div style="font-weight: 600;">${p.name}</div>
                 </div>
             `;
         });
@@ -1047,7 +1135,8 @@ export function renderAdminReport(container) {
             opt.onclick = (e) => {
                 e.stopPropagation();
                 selectedProjectId = opt.dataset.value;
-                projLabel.innerText = selectedProjectId || 'All Projects';
+                const p = db.getProject(selectedProjectId);
+                projLabel.innerText = p ? p.name : 'All Projects';
                 projPopover.classList.remove('active');
                 projTrigger.classList.remove('active');
                 loadReport();
@@ -1074,7 +1163,6 @@ export function renderAdminReport(container) {
         renderProjectOptions(projSearchInput.value);
     };
 
-    // Close dropdowns on outside click
     document.addEventListener('click', (e) => {
         if (!e.target.closest('#rep-employee-container')) {
             empPopover.classList.remove('active');
@@ -1086,148 +1174,145 @@ export function renderAdminReport(container) {
         }
     });
 
-    // 3. Load & Filter Report Logic
     const loadReport = () => {
         const status = filterStatus.value;
-        const targetDate = filterDate.value;
+        const fromDateStr = filterDateFrom.value;
+        const toDateStr = filterDateTo.value;
 
-        const allRequests = db.getRequests();
+        const allReqs = db.getRequests();
 
-        currentFiltered = allRequests.filter(r => {
+        currentFiltered = allReqs.filter(r => {
             const projectObj = db.getProject(r.project);
             const pName = projectObj ? projectObj.name : (r.project || '');
 
-            // Employee filter: requester or collaborator
             if (selectedEmployeeId && r.requesterId !== selectedEmployeeId && (!r.teamMembers || !r.teamMembers.includes(selectedEmployeeId))) {
                 return false;
             }
 
-            // Project filter
-            if (selectedProjectId && pName !== selectedProjectId && r.project !== selectedProjectId) {
+            if (selectedProjectId && r.project !== selectedProjectId) {
                 return false;
             }
 
-            // Status filter
             if (status && r.status !== status) {
                 return false;
             }
 
-            // Date filter: check if targetDate falls within the overtime schedule or matches overtime date
-            if (targetDate) {
-                const rStartDate = (r.startDate || r.overtimeDate || r.dateStart || '').slice(0, 10);
-                const rEndDate = (r.endDate || r.dateEnd || r.overtimeDate || r.startDate || '').slice(0, 10);
-                if (targetDate < rStartDate || targetDate > rEndDate) {
-                    return false;
-                }
+            const rStart = r.startDate || r.overtimeDate || r.dateStart;
+            if (rStart) {
+                const rDateOnly = rStart.slice(0, 10);
+                if (fromDateStr && rDateOnly < fromDateStr) return false;
+                if (toDateStr && rDateOnly > toDateStr) return false;
             }
 
             return true;
         });
 
-        // Sort descending by date
         currentFiltered.sort((a,b) => new Date(b.startDate || b.dateStart) - new Date(a.startDate || a.dateStart));
 
         const totalHours = currentFiltered.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
         const approvedHours = currentFiltered.filter(r => r.status === 'Approved').reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
-        summaryStats.innerHTML = `Showing <strong>${currentFiltered.length}</strong> records | Total Overtime: <strong>${totalHours.toFixed(1)}h</strong> (Approved: <strong style="color:var(--success);">${approvedHours.toFixed(1)}h</strong>)`;
+        const participatingWorkerIds = new Set();
+        currentFiltered.forEach(r => {
+            if (r.requesterId) participatingWorkerIds.add(r.requesterId);
+            if (r.teamMembers && Array.isArray(r.teamMembers)) {
+                r.teamMembers.forEach(tid => participatingWorkerIds.add(tid));
+            }
+        });
+
+        tabBtnWorkers.innerHTML = `${icons.users} Worker Hours Monitoring (${participatingWorkerIds.size})`;
+
+        const periodLabel = (fromDateStr || toDateStr) 
+            ? ` | Period: <strong>${fromDateStr || 'Start'}</strong> to <strong>${toDateStr || 'Latest'}</strong>`
+            : '';
+
+        summaryStats.innerHTML = `Showing <strong>${currentFiltered.length}</strong> records across <strong>${participatingWorkerIds.size}</strong> workers | Period Overtime: <strong>${totalHours.toFixed(1)}h</strong> (Approved: <strong style="color:var(--success);">${approvedHours.toFixed(1)}h</strong>)${periodLabel}`;
 
         if (currentFiltered.length === 0) {
             reportRows.innerHTML = `
                 <tr>
-                    <td colspan="7" style="text-align:center; padding: 32px; color: var(--text-muted);">
-                        ${icons.info} No overtime records match your filters.
+                    <td colspan="8" style="text-align:center; padding: 32px; color: var(--text-muted);">
+                        ${icons.info} No overtime records match your filters for this period.
                     </td>
                 </tr>
             `;
-            return;
+        } else {
+            reportRows.innerHTML = currentFiltered.map(r => {
+                const requester = db.getUser(r.requesterId);
+                const project = db.getProject(r.project);
+                const projectName = project ? project.name : (r.project || 'Project');
+
+                const allWorkerIds = Array.from(new Set([r.requesterId, ...(r.teamMembers || [])]));
+                const workersList = allWorkerIds.map(id => db.getUser(id) || { id, name: id, position: 'Staff', email: '' });
+
+                let statusBadge = '';
+                if (r.status === 'Approved') statusBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
+                else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
+                else statusBadge = `<span class="badge badge-pending">Pending</span>`;
+
+                const startDisplay = formatDateTime(r.startDate || r.dateStart);
+                const endDisplay = formatDateTime(r.endDate || r.dateEnd || r.startDate);
+
+                return `
+                    <tr class="rep-main-row" data-id="${r.id}" style="cursor: pointer;">
+                        <td>
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="rep-chevron" id="chevron-${r.id}" style="font-size: 0.72rem; color: var(--primary); transition: transform 0.2s; display: inline-block;">▶</span>
+                                <strong style="color: var(--text-main); font-size: 0.8rem;">${r.id}</strong>
+                            </div>
+                        </td>
+                        <td>
+                            <div style="font-weight: 600; color: var(--text-main); font-size: 0.82rem;">${requester ? requester.name : r.requesterId}</div>
+                            <div style="font-size: 0.72rem; color: var(--text-muted);">${requester ? requester.position : 'Staff'}</div>
+                        </td>
+                        <td style="font-weight: 500;">${projectName}</td>
+                        <td style="font-size: 0.78rem; color: var(--text-main); white-space: nowrap;">${startDisplay}</td>
+                        <td style="font-size: 0.78rem; color: var(--text-main); white-space: nowrap;">${endDisplay}</td>
+                        <td style="font-weight: 700; color: var(--primary); font-size: 0.84rem;">${Number(r.duration).toFixed(1)} hrs</td>
+                        <td>${statusBadge}</td>
+                        <td style="text-align: right;">
+                            <button class="btn btn-secondary btn-sm rep-view-details-btn" data-id="${r.id}" style="padding: 3px 8px; font-size: 0.72rem;">View Details</button>
+                        </td>
+                    </tr>
+                    <tr class="rep-sub-row" id="subrow-${r.id}" style="display: none; background: #f8fafc;">
+                        <td colspan="8" style="padding: 10px 14px; border-bottom: 1px solid var(--border-color);">
+                            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px;">
+                                <div style="flex: 1; min-width: 260px;">
+                                    <div style="font-size: 0.74rem; text-transform: uppercase; font-weight: 700; color: var(--text-muted); margin-bottom: 4px;">
+                                        Participating Workers (${workersList.length})
+                                    </div>
+                                    <div style="display: flex; flex-direction: column; gap: 3px;">
+                                        ${workersList.map((w, idx) => {
+                                            const isPrimary = w.id === r.requesterId;
+                                            return `
+                                                <div style="display: flex; align-items: center; gap: 6px; font-size: 0.8rem; color: var(--text-main);">
+                                                    <span style="color: var(--text-muted); font-size: 0.74rem; width: 14px;">${idx + 1}.</span>
+                                                    <strong>${w.name}</strong>
+                                                    <span style="color: var(--text-muted); font-size: 0.74rem;">(${w.position || 'Staff'}${isPrimary ? ' • Lead' : ''})</span>
+                                                </div>
+                                            `;
+                                        }).join('')}
+                                    </div>
+
+                                    ${r.targetWork || r.target_work ? `
+                                        <div style="margin-top: 8px; font-size: 0.78rem; color: var(--text-muted);">
+                                            <strong>Target Deliverables:</strong> ${r.targetWork || r.target_work}
+                                        </div>
+                                    ` : ''}
+                                </div>
+                                <div>
+                                    <button class="btn btn-primary btn-sm rep-modal-btn" data-id="${r.id}" style="padding: 4px 10px; font-size: 0.74rem;">
+                                        Open Full Request
+                                    </button>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
         }
 
-        reportRows.innerHTML = currentFiltered.map(r => {
-            const requester = db.getUser(r.requesterId);
-            const project = db.getProject(r.project);
-            const projectName = project ? project.name : (r.project || 'Project');
-
-            // All participating workers under this OT request
-            const allWorkerIds = Array.from(new Set([r.requesterId, ...(r.teamMembers || [])]));
-            const workersList = allWorkerIds.map(id => db.getUser(id) || { id, name: id, position: 'Staff', email: '' });
-
-            let statusBadge = '';
-            if (r.status === 'Approved') statusBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
-            else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
-            else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
-            else statusBadge = `<span class="badge badge-pending">Pending</span>`;
-
-            const dateDisplay = formatDateTime(r.startDate || r.dateStart);
-
-            return `
-                <tr class="rep-main-row" data-id="${r.id}" style="cursor: pointer;">
-                    <td>
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span class="rep-chevron" id="chevron-${r.id}" style="font-size: 0.75rem; color: var(--primary); transition: transform 0.2s; display: inline-block;">▶</span>
-                            <strong style="color: var(--text-main);">${r.id}</strong>
-                        </div>
-                    </td>
-                    <td>
-                        <div style="font-weight: 600; color: var(--text-main);">${requester ? requester.name : r.requesterId}</div>
-                        <div style="font-size: 0.75rem; color: var(--text-muted);">${requester ? requester.position : 'Staff'}</div>
-                    </td>
-                    <td>${projectName}</td>
-                    <td style="font-size: 0.85rem; color: var(--text-main); white-space: nowrap;">${dateDisplay}</td>
-                    <td style="font-weight: 700; color: var(--primary);">${Number(r.duration).toFixed(1)} hrs</td>
-                    <td>${statusBadge}</td>
-                    <td style="text-align: right;">
-                        <button class="btn btn-secondary btn-sm rep-view-details-btn" data-id="${r.id}" style="padding: 4px 10px; font-size: 0.78rem;">View Details</button>
-                    </td>
-                </tr>
-                <tr class="rep-sub-row" id="subrow-${r.id}" style="display: none; background: #f8fafc;">
-                    <td colspan="7" style="padding: 14px 20px; border-bottom: 1px solid var(--border-color);">
-                        <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 16px;">
-                            <div style="flex: 1; min-width: 280px;">
-                                <!-- Structured Schedule Widget -->
-                                <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; padding: 8px 14px; background: #ffffff; border: 1px solid var(--border-color); border-radius: 8px; width: fit-content; box-shadow: 0 1px 2px rgba(0,0,0,0.03);">
-                                    <div style="display: flex; align-items: center; gap: 6px;">
-                                        <span style="font-size: 0.72rem; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 0.5px;">Start:</span>
-                                        <span style="font-weight: 600; font-size: 0.88rem; color: var(--text-main);">${formatDateTime(r.startDate || r.dateStart)}</span>
-                                    </div>
-                                    <span style="color: var(--text-muted); font-size: 0.85rem; font-weight: 600; padding: 0 2px;">➔</span>
-                                    <div style="display: flex; align-items: center; gap: 6px;">
-                                        <span style="font-size: 0.72rem; font-weight: 700; color: #8b5cf6; text-transform: uppercase; letter-spacing: 0.5px;">End:</span>
-                                        <span style="font-weight: 600; font-size: 0.88rem; color: var(--text-main);">${formatDateTime(r.endDate || r.dateEnd || r.startDate)}</span>
-                                    </div>
-                                    <div style="margin-left: 6px; padding-left: 10px; border-left: 1px solid var(--border-color); font-weight: 700; color: var(--primary); font-size: 0.86rem;">
-                                        ${Number(r.duration).toFixed(1)} hrs
-                                    </div>
-                                </div>
-
-                                <div style="font-size: 0.75rem; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px; color: var(--text-muted); margin-bottom: 6px;">
-                                    Participating Workers (${workersList.length})
-                                </div>
-                                <div style="display: flex; flex-direction: column; gap: 4px;">
-                                    ${workersList.map((w, idx) => {
-                                        const isPrimary = w.id === r.requesterId;
-                                        return `
-                                            <div style="display: flex; align-items: center; gap: 8px; font-size: 0.86rem; color: var(--text-main);">
-                                                <span style="color: var(--text-muted); font-size: 0.8rem; font-weight: 600; width: 18px;">${idx + 1}.</span>
-                                                <strong style="color: var(--text-main);">${w.name}</strong>
-                                                <span style="color: var(--text-muted); font-size: 0.8rem;">(${w.position || 'Staff'}${isPrimary ? ' • <span style="color:var(--primary); font-weight:600;">Lead</span>' : ''})</span>
-                                            </div>
-                                        `;
-                                    }).join('')}
-                                </div>
-                            </div>
-                            <div style="align-self: center;">
-                                <button class="btn btn-primary btn-sm rep-modal-btn" data-id="${r.id}" style="padding: 6px 14px; font-size: 0.82rem;">
-                                    Open Full Request
-                                </button>
-                            </div>
-                        </div>
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
-        // Attach click listeners: clicking row toggles worker dropdown list
         reportRows.querySelectorAll('.rep-main-row').forEach(row => {
             row.onclick = (e) => {
                 if (e.target.closest('.rep-view-details-btn')) {
@@ -1237,21 +1322,17 @@ export function renderAdminReport(container) {
                     }
                     return;
                 }
-
                 const reqId = row.dataset.id;
                 const subRow = document.getElementById(`subrow-${reqId}`);
                 const chevron = document.getElementById(`chevron-${reqId}`);
                 if (subRow) {
                     const isHidden = subRow.style.display === 'none';
                     subRow.style.display = isHidden ? 'table-row' : 'none';
-                    if (chevron) {
-                        chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
-                    }
+                    if (chevron) chevron.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
                 }
             };
         });
 
-        // Attach click listeners to "View Details" and "Open Full Request" buttons
         reportRows.querySelectorAll('.rep-modal-btn, .rep-view-details-btn').forEach(btn => {
             btn.onclick = (e) => {
                 e.stopPropagation();
@@ -1261,18 +1342,139 @@ export function renderAdminReport(container) {
                 }
             };
         });
+
+        if (participatingWorkerIds.size === 0) {
+            reportWorkersContainer.innerHTML = `
+                <div class="empty-state" style="padding: 32px; text-align: center; color: var(--text-muted); background: #ffffff; border-radius: 8px; border: 1px solid var(--border-color);">
+                    ${icons.info}
+                    <div style="margin-top: 8px; font-weight: 500; font-size: 0.88rem;">No worker overtime sessions match the selected period.</div>
+                </div>
+            `;
+        } else {
+            const workerCardsHtml = Array.from(participatingWorkerIds).map(workerId => {
+                const worker = db.getUser(workerId) || { id: workerId, name: workerId, position: 'Worker', email: '' };
+                const workerLimits = db.getWorkerLimits(workerId) || { monthlyMax: 104 };
+                const monthlyMax = workerLimits.monthlyMax || 104;
+
+                const workerShifts = currentFiltered.filter(r => 
+                    r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId))
+                );
+
+                const workerPeriodHours = workerShifts.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+                
+                const workerAllApproved = allReqs.filter(r => 
+                    r.status === 'Approved' && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
+                );
+                const totalAccruedMonth = workerAllApproved.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+                const pct = monthlyMax > 0 ? Math.min(100, Math.round((totalAccruedMonth / monthlyMax) * 100)) : 0;
+                const progressColor = pct >= 90 ? 'var(--danger)' : (pct >= 70 ? 'var(--warning)' : 'var(--success)');
+
+                return `
+                    <div class="card glass-panel" style="margin-bottom: 0; padding: 14px; border: 1px solid var(--border-color); border-radius: 10px; background: #ffffff;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="width: 38px; height: 38px; border-radius: 50%; background: #e0e7ff; color: var(--primary); font-weight: 700; display: flex; align-items: center; justify-content: center; font-size: 0.9rem;">
+                                    ${(worker.name || 'W').slice(0,2).toUpperCase()}
+                                </div>
+                                <div>
+                                    <div style="font-weight: 700; font-size: 0.95rem; color: var(--text-main);">${worker.name}</div>
+                                    <div style="font-size: 0.75rem; color: var(--text-muted);">${worker.position || 'Staff'} &bull; ${worker.email || ''}</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+                                <div style="text-align: right;">
+                                    <div style="font-size: 0.7rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700;">Period OT Hours</div>
+                                    <div style="font-size: 1.15rem; font-weight: 800; color: var(--primary);">${workerPeriodHours.toFixed(1)} <span style="font-size: 0.75rem; font-weight: 500; color: var(--text-muted);">hrs (${workerShifts.length} shifts)</span></div>
+                                </div>
+                                <div style="min-width: 130px;">
+                                    <div style="display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); font-weight: 600;">
+                                        <span>Monthly Accrual:</span>
+                                        <span style="color: ${progressColor}; font-weight: 700;">${totalAccruedMonth.toFixed(1)} / ${monthlyMax}h (${pct}%)</span>
+                                    </div>
+                                    <div style="background: #e2e8f0; height: 5px; border-radius: 99px; margin-top: 4px; overflow: hidden;">
+                                        <div style="background: ${progressColor}; width: ${pct}%; height: 100%; border-radius: 99px;"></div>
+                                    </div>
+                                </div>
+                                <button class="btn btn-secondary btn-sm toggle-worker-shifts-btn" data-wid="${workerId}" style="font-size: 0.74rem; padding: 4px 10px; display: flex; align-items: center; gap: 4px;">
+                                    <span id="worker-chevron-${workerId}" style="font-size: 0.7rem; transition: transform 0.2s;">▶</span> Daily Breakdown
+                                </button>
+                            </div>
+                        </div>
+                        <div id="worker-shifts-table-${workerId}" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+                            <div style="font-size: 0.75rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+                                Overtime Sessions in Selected Period (${workerShifts.length})
+                            </div>
+                            <div class="table-container" style="border-radius: 6px; border: 1px solid var(--border-color); margin-top: 4px;">
+                                <table style="font-size: 0.74rem;">
+                                    <thead>
+                                        <tr style="background: #f8fafc;">
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Date</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Start</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">End</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Project</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Gross</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Break</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Net</th>
+                                            <th style="padding: 4px 8px; font-size: 0.68rem;">Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${workerShifts.map(ws => {
+                                            const pObj = db.getProject(ws.project);
+                                            const pName = pObj ? pObj.name : (ws.project || 'Project');
+                                            const sObj = new Date(ws.startDate || ws.dateStart);
+                                            const eObj = new Date(ws.endDate || ws.dateEnd || ws.startDate);
+                                            const dateOnly = formatDateOnly(ws.startDate || ws.dateStart);
+                                            const sTime = !isNaN(sObj.getTime()) ? sObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : ws.timeStart || '-';
+                                            const eTime = !isNaN(eObj.getTime()) ? eObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : ws.timeEnd || '-';
+                                            let st = ws.status === 'Approved' ? '✅ Approved' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending');
+                                            return `
+                                                <tr>
+                                                    <td style="padding: 5px 8px; font-weight: 600;">${dateOnly}</td>
+                                                    <td style="padding: 5px 8px;">${sTime}</td>
+                                                    <td style="padding: 5px 8px;">${eTime}</td>
+                                                    <td style="padding: 5px 8px;">${pName}</td>
+                                                    <td style="padding: 5px 8px; color: var(--text-muted);">${Number(ws.grossDuration || ws.duration || 0).toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px;">-${Number(ws.restDeduction || 0).toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px; font-weight: 700; color: var(--primary);">${Number(ws.duration || 0).toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px;">${st}</td>
+                                                </tr>
+                                            `;
+                                        }).join('')}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            reportWorkersContainer.innerHTML = workerCardsHtml;
+            reportWorkersContainer.querySelectorAll('.toggle-worker-shifts-btn').forEach(btn => {
+                btn.onclick = () => {
+                    const wid = btn.dataset.wid;
+                    const tbl = document.getElementById(`worker-shifts-table-${wid}`);
+                    const chv = document.getElementById(`worker-chevron-${wid}`);
+                    if (tbl) {
+                        const isHidden = tbl.style.display === 'none';
+                        tbl.style.display = isHidden ? 'block' : 'none';
+                        if (chv) chv.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+                    }
+                };
+            });
+        }
     };
 
     filterStatus.onchange = loadReport;
-    filterDate.onchange = loadReport;
-
+    filterDateFrom.onchange = loadReport;
+    filterDateTo.onchange = loadReport;
     btnResetFilters.onclick = () => {
         selectedEmployeeId = '';
         selectedProjectId = '';
         empLabel.innerText = 'All Employees';
         projLabel.innerText = 'All Projects';
         filterStatus.value = '';
-        filterDate.value = '';
+        filterDateFrom.value = '';
+        filterDateTo.value = '';
         loadReport();
     };
 
@@ -1280,198 +1482,49 @@ export function renderAdminReport(container) {
     renderProjectOptions();
     loadReport();
 
-    // 1. Export Excel (.xlsx)
     btnExportExcel.onclick = () => {
-        if (currentFiltered.length === 0) {
-            showToast("No data to export.", "error");
-            return;
-        }
-
+        if (currentFiltered.length === 0) { showToast("No data.", "error"); return; }
         const data = currentFiltered.map(r => {
             const requester = db.getUser(r.requesterId);
-            const project = db.getProject(r.project);
-            const allWorkerIds = Array.from(new Set([r.requesterId, ...(r.teamMembers || [])]));
-            const workersList = allWorkerIds.map(id => {
-                const u = db.getUser(id);
-                return u ? `${u.name} (${u.position || 'Staff'})` : id;
-            }).join('; ');
-
-            const startObj = new Date(r.startDate || r.dateStart);
-            const endObj = new Date(r.endDate || r.dateEnd || r.startDate);
-            const startDateStr = formatDateOnly(r.startDate || r.dateStart);
-            const startTimeStr = !isNaN(startObj.getTime()) ? startObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
-            const endDateStr = formatDateOnly(r.endDate || r.dateEnd || r.startDate);
-            const endTimeStr = !isNaN(endObj.getTime()) ? endObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
-
             return {
                 "OT ID": r.id,
                 "Requestor": requester ? requester.name : r.requesterId,
-                "Position": requester ? requester.position || 'Staff' : 'Staff',
-                "Project": project ? project.name : (r.project || 'N/A'),
-                "Start Date": startDateStr,
-                "Start Time": startTimeStr,
-                "End Date": endDateStr,
-                "End Time": endTimeStr,
-                "Total Hours": Number(r.duration || 0),
-                "Status": r.status,
-                "Participating Workers": workersList,
-                "Target Deliverables": r.targetWork || r.target_work || '',
-                "Approver Remarks": r.approverRemarks || ''
+                "Project": db.getProject(r.project)?.name || r.project,
+                "Start Date": formatDateOnly(r.startDate || r.dateStart),
+                "End Date": formatDateOnly(r.endDate || r.dateEnd || r.startDate),
+                "Gross Hours": Number(r.grossDuration || r.duration || 0),
+                "Rest Deduction": Number(r.restDeduction || 0),
+                "Net Claimable OT Hours": Number(r.duration || 0),
+                "Status": r.status
             };
         });
-
         if (window.XLSX) {
-            const worksheet = window.XLSX.utils.json_to_sheet(data);
-            const workbook = window.XLSX.utils.book_new();
-            window.XLSX.utils.book_append_sheet(workbook, worksheet, "Overtime Report");
-            window.XLSX.writeFile(workbook, `ClockPlus_Overtime_Report_${new Date().toISOString().slice(0,10)}.xlsx`);
-            showToast("Excel report (.xlsx) exported successfully.", "success");
+            const wb = window.XLSX.utils.book_new();
+            window.XLSX.utils.book_append_sheet(wb, window.XLSX.utils.json_to_sheet(data), "Report");
+            window.XLSX.writeFile(wb, `Report_${new Date().getTime()}.xlsx`);
         } else {
-            // Fallback to CSV
-            let csvContent = "data:text/csv;charset=utf-8,";
-            const headers = Object.keys(data[0]);
-            csvContent += headers.join(",") + "\n";
-            data.forEach(row => {
-                csvContent += headers.map(h => `"${String(row[h] || '').replace(/"/g, '""')}"`).join(",") + "\n";
-            });
-            const encodedUri = encodeURI(csvContent);
-            const link = document.createElement("a");
-            link.setAttribute("href", encodedUri);
-            link.setAttribute("download", `ClockPlus_Overtime_Report_${new Date().toISOString().slice(0,10)}.csv`);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            showToast("Report exported successfully.", "success");
+            showToast("Excel engine not loaded.", "error");
         }
     };
 
-    // 2. Export PDF (.pdf)
     btnExportPDF.onclick = () => {
-        if (currentFiltered.length === 0) {
-            showToast("No data to export.", "error");
-            return;
-        }
-
+        if (currentFiltered.length === 0) { showToast("No data.", "error"); return; }
         if (window.jspdf && window.jspdf.jsPDF) {
-            try {
-                const { jsPDF } = window.jspdf;
-                const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
-                const companyName = localStorage.getItem('clock_plus_session_company') || (db.getCurrentUser() || {}).company || 'Testing';
-
-                // Corporate Branding Header
-                doc.setFontSize(18);
-                doc.setTextColor(79, 70, 229); // Primary Indigo #4f46e5
-                doc.text("Clock+ Overtime & Compliance Report", 40, 36);
-
-                doc.setFontSize(10.5);
-                doc.setTextColor(15, 23, 42); // Slate-900
-                doc.text(`Company: ${companyName}`, 40, 54);
-
-                doc.setFontSize(8.5);
-                doc.setTextColor(100, 116, 139);
-                const generatedDate = formatDateTime(new Date().toISOString());
-                const totalHours = currentFiltered.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
-                const approvedHours = currentFiltered.filter(r => r.status === 'Approved').reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
-
-                doc.text(`Generated on: ${generatedDate}  |  Total Records: ${currentFiltered.length}  |  Total Overtime: ${totalHours.toFixed(1)} hrs (Approved: ${approvedHours.toFixed(1)} hrs)`, 40, 68);
-
-                // Nested Table Headers (Sub-columns for Date & Time)
-                const tableHeaders = [
-                    [
-                        { content: 'OT ID', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-                        { content: 'Requestor', rowSpan: 2, styles: { valign: 'middle' } },
-                        { content: 'Project', rowSpan: 2, styles: { valign: 'middle' } },
-                        { content: 'Start Schedule', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'End Schedule', colSpan: 2, styles: { halign: 'center' } },
-                        { content: 'Hours', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-                        { content: 'Status', rowSpan: 2, styles: { valign: 'middle', halign: 'center' } },
-                        { content: 'Workers List', rowSpan: 2, styles: { valign: 'middle' } }
-                    ],
-                    [
-                        { content: 'Date', styles: { halign: 'center' } },
-                        { content: 'Time', styles: { halign: 'center' } },
-                        { content: 'Date', styles: { halign: 'center' } },
-                        { content: 'Time', styles: { halign: 'center' } }
-                    ]
-                ];
-
-                const tableData = currentFiltered.map(r => {
-                    const requester = db.getUser(r.requesterId);
-                    const project = db.getProject(r.project);
-                    const allWorkerIds = Array.from(new Set([r.requesterId, ...(r.teamMembers || [])]));
-                    const workers = allWorkerIds.map((id, idx) => {
-                        const u = db.getUser(id);
-                        return `${idx + 1}. ${(u ? u.name : id)}`;
-                    }).join('\n');
-
-                    const startObj = new Date(r.startDate || r.dateStart);
-                    const endObj = new Date(r.endDate || r.dateEnd || r.startDate);
-                    const startDateStr = formatDateOnly(r.startDate || r.dateStart);
-                    const startTimeStr = !isNaN(startObj.getTime()) ? startObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
-                    const endDateStr = formatDateOnly(r.endDate || r.dateEnd || r.startDate);
-                    const endTimeStr = !isNaN(endObj.getTime()) ? endObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : '-';
-
-                    return [
-                        r.id,
-                        (requester ? requester.name : r.requesterId) + (requester && requester.position ? `\n(${requester.position})` : ''),
-                        project ? project.name : (r.project || 'N/A'),
-                        startDateStr,
-                        startTimeStr,
-                        endDateStr,
-                        endTimeStr,
-                        `${Number(r.duration).toFixed(1)} hrs`,
-                        r.status,
-                        workers
-                    ];
-                });
-
-                doc.autoTable({
-                    head: tableHeaders,
-                    body: tableData,
-                    startY: 80,
-                    theme: 'grid',
-                    headStyles: {
-                        fillColor: [79, 70, 229],
-                        textColor: [255, 255, 255],
-                        fontStyle: 'bold',
-                        fontSize: 8.5
-                    },
-                    bodyStyles: {
-                        fontSize: 8,
-                        textColor: [30, 41, 59]
-                    },
-                    alternateRowStyles: {
-                        fillColor: [248, 250, 252]
-                    },
-                    columnStyles: {
-                        0: { halign: 'center', cellWidth: 55 },
-                        3: { halign: 'center', cellWidth: 60 },
-                        4: { halign: 'center', cellWidth: 55 },
-                        5: { halign: 'center', cellWidth: 60 },
-                        6: { halign: 'center', cellWidth: 55 },
-                        7: { halign: 'center', cellWidth: 45 },
-                        8: { halign: 'center', cellWidth: 55 }
-                    },
-                    margin: { left: 35, right: 35 },
-                    styles: { overflow: 'linebreak', cellPadding: 4.5 }
-                });
-
-                doc.save(`ClockPlus_Overtime_Report_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().slice(0,10)}.pdf`);
-                showToast("PDF report (.pdf) exported successfully.", "success");
-                return;
-            } catch (err) {
-                console.error("jsPDF export error:", err);
-            }
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('landscape', 'pt', 'a4');
+            doc.text("Overtime Report", 40, 40);
+            doc.autoTable({
+                startY: 60,
+                head: [['ID', 'Requestor', 'Project', 'Start', 'End', 'Net Hours', 'Status']],
+                body: currentFiltered.map(r => [r.id, db.getUser(r.requesterId)?.name || r.requesterId, r.project, formatDateOnly(r.startDate), formatDateOnly(r.endDate), r.duration.toFixed(1), r.status])
+            });
+            doc.save(`Report_${new Date().getTime()}.pdf`);
+        } else {
+            window.print();
         }
-
-        // Fallback: Browser Print to PDF
-        window.print();
     };
 }
 
-// =========================================================================
-// 4. SETTINGS (Personal Profile for Non-Admins / Full Console for Admins)
-// =========================================================================
 export function renderAdminSettings(container) {
     const currentUser = db.getCurrentUser();
     const isAdmin = currentUser && currentUser.role === 'admin';
