@@ -497,26 +497,27 @@ export function renderAdminRequest(container) {
                     </div>
 
                     <!-- List of Workers (Clean Name Only + Search Bar + Preset Current User) -->
-                    <div class="form-group" style="margin-bottom: 20px;">
-                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 10px;">
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 8px;">
                             <div>
-                                <label style="font-weight: 700; margin-bottom: 2px; display: block;">List of Workers</label>
-                                <span style="font-size: 0.78rem; color: var(--text-muted);">Select one or more employees for this overtime schedule.</span>
+                                <label style="font-weight: 700; font-size: 0.82rem; margin-bottom: 1px; display: block;">List of Workers</label>
+                                <span style="font-size: 0.74rem; color: var(--text-muted);">Select one or more employees for this overtime schedule.</span>
                             </div>
-                            <div style="display: flex; align-items: center; gap: 8px;">
-                                <input type="text" id="admin-search-workers" placeholder="Search worker name..." style="padding: 6px 12px; font-size: 0.82rem; border-radius: 6px; border: 1.5px solid var(--border-color); background: #ffffff !important; color: #0f172a !important; width: 170px;">
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-select-all-workers" style="font-size: 0.76rem; padding: 6px 12px;">Select All</button>
-                                <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-workers" style="font-size: 0.76rem; padding: 6px 12px;">Clear</button>
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <input type="text" id="admin-search-workers" placeholder="Search worker..." style="padding: 4px 8px; font-size: 0.76rem; border-radius: 6px; border: 1px solid var(--border-color); background: #ffffff !important; color: #0f172a !important; width: 140px; height: 32px; min-height: 32px;">
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-select-all-workers" style="font-size: 0.72rem; padding: 4px 8px; min-height: 32px;">Select All</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btn-clear-workers" style="font-size: 0.72rem; padding: 4px 8px; min-height: 32px;">Clear</button>
                             </div>
                         </div>
 
-                        <div class="worker-selection-container" id="admin-workers-checklist" style="max-height: 240px; overflow-y: auto; border: 1.5px solid var(--border-color); border-radius: 8px; padding: 8px; background: var(--bg-surface); display: flex; flex-direction: column; gap: 6px;">
+                        <div class="worker-selection-container" id="admin-workers-checklist" style="max-height: 190px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 8px; padding: 6px; background: #f8fafc; display: flex; flex-direction: column; gap: 4px;">
                             ${users.map(u => {
                                 const isPreset = Boolean(currentUserId && (u.id === currentUserId || (currentEmail && u.email && u.email.toLowerCase() === currentEmail.toLowerCase())));
+                                const roleLabel = u.role ? `<span style="font-size: 0.72rem; color: var(--text-muted); font-weight: 500;">(${u.position || u.role})</span>` : '';
                                 return `
-                                <label class="worker-select-card" data-name="${(u.name || u.email).toLowerCase()}" style="display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s ease; background: #ffffff;">
-                                    <input type="checkbox" class="admin-worker-checkbox" value="${u.id}" ${isPreset ? 'checked' : ''} style="width: 17px; height: 17px; cursor: pointer;">
-                                    <span style="font-weight: 700; font-size: 0.92rem; color: var(--text-main);">${u.name || u.email}</span>
+                                <label class="worker-select-card" data-name="${(u.name || u.email).toLowerCase()}" style="display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--border-color); border-radius: 6px; cursor: pointer; transition: all 0.15s ease; background: #ffffff;">
+                                    <input type="checkbox" class="admin-worker-checkbox" value="${u.id}" ${isPreset ? 'checked' : ''} style="width: 15px; height: 15px; min-height: 15px; cursor: pointer; flex-shrink: 0;">
+                                    <span style="font-weight: 600; font-size: 0.82rem; color: var(--text-main); line-height: 1.2;">${u.name || u.email} ${roleLabel}</span>
                                 </label>
                                 `;
                             }).join('')}

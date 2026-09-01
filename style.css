@@ -1726,12 +1726,39 @@ strong svg,
         color: var(--text-main) !important;
     }
 
-    input, select {
+    input:not([type="checkbox"]):not([type="radio"]), select {
         min-height: 38px !important;
         height: 38px !important;
         padding: 0 10px !important;
         font-size: 0.82rem !important;
         border-radius: 8px !important;
+    }
+
+    input[type="checkbox"], input[type="radio"] {
+        min-height: 15px !important;
+        height: 15px !important;
+        width: 15px !important;
+        margin: 0 !important;
+        flex-shrink: 0 !important;
+        cursor: pointer !important;
+    }
+
+    .worker-selection-container {
+        padding: 4px !important;
+        gap: 4px !important;
+        max-height: 190px !important;
+    }
+
+    .worker-select-card {
+        padding: 6px 10px !important;
+        gap: 8px !important;
+        border-radius: 6px !important;
+        min-height: auto !important;
+    }
+
+    .worker-select-card span {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
     }
 
     textarea {
