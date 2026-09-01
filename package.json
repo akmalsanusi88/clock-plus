@@ -1,0 +1,9 @@
+{
+  "name": "clock-plus",
+  "version": "1.0.0",
+  "description": "Clock+ Overtime Management & Compliance System",
+  "type": "module",
+  "scripts": {
+    "dev": "npx http-server -p 8080"
+  }
+}

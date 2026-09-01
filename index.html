@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="theme-color" content="#4f46e5">
+    <title>Clock+ | Overtime Management & Compliance System</title>
+    <meta name="description" content="Streamlined request, approval, and compliance tracking for employee overtime.">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert("JS ERROR: " + message + " \nSource: " + source + " \nLine: " + lineno);
+        };
+        window.addEventListener('unhandledrejection', function(event) {
+            alert("UNHANDLED PROMISE REJECTION: " + event.reason);
+        });
+    </script>
+</head>
+<body>
+
+
+
+    <!-- Main Header -->
+    <header>
+        <div style="display: flex; align-items: center; gap: 14px; position: relative;">
+            <!-- Brand Logo -->
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <div class="logo-icon" style="width: 36px; height: 36px; font-size: 1rem; border-radius: 8px;">C+</div>
+                <span class="logo-text" style="font-size: 1.2rem; font-weight: 800; color: var(--text-main);">Clock+</span>
+                <span class="logo-badge" id="header-company-badge" style="background: rgba(99, 102, 241, 0.12); color: var(--primary); font-size: 0.75rem; padding: 2px 8px; border-radius: 6px; font-weight: 600;">Testing</span>
+            </div>
+
+            <!-- Bubble Menu Trigger Button -->
+            <button class="nav-menu-btn" id="nav-bubble-toggle" aria-label="Toggle Menu">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:18px;height:18px;">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+                <span>Menu</span>
+            </button>
+
+            <!-- Floating Menu Bubble Popover -->
+            <div class="nav-bubble-popover" id="nav-bubble-popover">
+                <div class="bubble-user-header" id="bubble-user-header">
+                    <!-- Injected by JS: Avatar, Name, Email, Position -->
+                </div>
+                <div class="bubble-menu-items" id="bubble-menu-items">
+                    <!-- Navigation links injected by JS -->
+                </div>
+                <div class="bubble-menu-footer">
+                    <button id="bubble-logout-btn" class="bubble-logout-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                        <span>Log Out</span>
+                    </button>
+                </div>
+            </div>
+
+            <div id="page-title-area" style="margin-left: 8px;">
+                <h1 class="view-title" id="page-title" style="font-size: 1.25rem; font-weight: 700; margin: 0;">Dashboard</h1>
+            </div>
+        </div>
+
+        <!-- Notifications Bell -->
+        <!-- Notifications Bell & Bubble Popover -->
+        <div class="dev-panel" style="position: relative;">
+            <div class="notification-bell-container" id="notif-bell" title="Notifications">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:24px;height:24px;color:var(--text-main);">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                </svg>
+                <span class="notification-badge" id="notif-badge" style="display: none;">0</span>
+            </div>
+
+            <!-- Floating Notification Bubble Popover -->
+            <div class="notif-bubble-popover" id="notifications-popover">
+                <div class="notif-popover-header">
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span style="font-weight:700; font-size:0.95rem; color:var(--text-main);">Notifications</span>
+                        <span class="badge badge-pending" id="notif-popover-unread-count" style="display:none; font-size:0.72rem; padding: 2px 7px;">0</span>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <button class="btn btn-secondary btn-sm" id="btn-mark-all-read" style="font-size:0.72rem; padding:3px 7px; border-radius:6px;">Mark all read</button>
+                        <button class="btn btn-secondary btn-sm" id="btn-clear-all-notifs" style="font-size:0.72rem; padding:3px 7px; border-radius:6px; color:#ef4444;" title="Delete all notifications">Clear all</button>
+                    </div>
+                </div>
+                <div class="notif-popover-list" id="drawer-notifications-list">
+                    <!-- Notifications injected dynamically -->
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content Panel -->
+    <main id="main-content">
+        <div id="view-container">
+            <!-- Active view (Admin, Worker, Superior) will be rendered here dynamically -->
+        </div>
+    </main>
+
+    <!-- Toast Notifications Container -->
+    <div id="toast-container"></div>
+
+    <!-- MODAL: Interactive Request Review, Time Adjustment & Decision -->
+    <div class="modal-overlay" id="review-ot-modal">
+        <div class="modal-box glass-panel" style="max-width: 620px; width: 95%; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-header">
+                <div>
+                    <h3 class="modal-title" id="rev-modal-title" style="margin: 0; font-size: 1.15rem;">Review Overtime Request</h3>
+                    <div id="rev-modal-subtitle" style="font-size: 0.82rem; color: var(--text-muted); margin-top: 4px;"></div>
+                </div>
+                <span class="modal-close" onclick="document.getElementById('review-ot-modal').classList.remove('active')">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:20px;height:20px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </span>
+            </div>
+
+            <!-- Content Area Injected Dynamically -->
+            <div id="rev-modal-body" style="display: flex; flex-direction: column; gap: 16px; margin-top: 14px;"></div>
+        </div>
+    </div>
+
+    <!-- MODAL: Rejection Reason -->
+    <div class="modal-overlay" id="reject-modal">
+        <div class="modal-box glass-panel">
+            <div class="modal-drag-handle"></div>
+            <div class="modal-header">
+                <h3 class="modal-title" style="color:var(--danger);">Reject Overtime Request</h3>
+                <span class="modal-close" onclick="document.getElementById('reject-modal').classList.remove('active')">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:20px;height:20px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </span>
+            </div>
+            <div class="form-group full-width">
+                <label for="rejection-reason-input">Reason for Rejection (Mandatory)</label>
+                <textarea id="rejection-reason-input" placeholder="Explain why this request is being rejected..." required></textarea>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('reject-modal').classList.remove('active')">Cancel</button>
+                <button class="btn btn-danger" id="confirm-reject-btn">Reject Request</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Worker Consent for Special Requests (Over-Limit) -->
+    <div class="modal-overlay" id="consent-modal">
+        <div class="modal-box glass-panel" style="max-width: 480px;">
+            <div class="modal-drag-handle"></div>
+            <div class="modal-header">
+                <h3 class="modal-title" style="color:var(--warning);">Digital Consent Required</h3>
+                <span class="modal-close" onclick="document.getElementById('consent-modal').classList.remove('active')">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:20px;height:20px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </span>
+            </div>
+            <div style="font-size: 0.95rem; line-height: 1.5; color: var(--text-main); margin-bottom: 20px;">
+                <p>This overtime assignment exceeds your standard daily, weekly, or monthly limits. Under labor guidelines, working excessive overtime requires your explicit digital consent before scheduling.</p>
+                <div class="checkbox-card" style="margin-top: 16px;">
+                    <input type="checkbox" id="modal-consent-checkbox">
+                    <label for="modal-consent-checkbox" style="color: var(--text-main); font-weight: 500; font-size: 0.88rem;">
+                        I explicitly consent to working these additional overtime hours. I confirm this schedule is acceptable and agreed upon.
+                    </label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('consent-modal').classList.remove('active')">Cancel</button>
+                <button class="btn btn-success" id="confirm-consent-btn" disabled>Accept & Consent</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Superior Review & Modify Request -->
+    <div class="modal-overlay" id="modify-modal">
+        <div class="modal-box glass-panel" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3 class="modal-title">Review & Modify Overtime Request</h3>
+                <span class="modal-close" onclick="document.getElementById('modify-modal').classList.remove('active')">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:20px;height:20px;">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </span>
+            </div>
+            <form id="modify-request-form" onsubmit="event.preventDefault();">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="modify-start-date">Proposed Start Date/Time</label>
+                        <input type="datetime-local" id="modify-start-date" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="modify-end-date">Proposed Expected Finish Date/Time</label>
+                        <input type="datetime-local" id="modify-end-date" required>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="modify-target-work">Adjust Target Work / Deliverables</label>
+                    <textarea id="modify-target-work" required></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label>Adjust Team Members Collaborating</label>
+                    <div class="checklist-container" id="modify-team-checklist">
+                        <!-- Checklist of team members injected dynamically -->
+                    </div>
+                </div>
+                
+                <!-- Compliance indicators within modify modal -->
+                <div id="modify-compliance-indicator"></div>
+
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('modify-modal').classList.remove('active')">Cancel</button>
+                    <button type="button" class="btn btn-success" id="save-modified-btn">Apply & Approve</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Login Page -->
+    <div id="login-screen" class="auth-screen">
+        <div class="auth-card glass-panel">
+            <div class="auth-intro-side">
+                <div class="auth-logo">
+                    <span class="logo-icon">C+</span>
+                    <span class="logo-text" style="font-size: 1.8rem;">Clock+</span>
+                </div>
+                <h2 class="auth-heading">Overtime Management &amp; Compliance</h2>
+                <p class="auth-desc">Clock+ streamlines overtime request submission, manager approvals, digital consent tracking, and automated labor law compliance in a premium real-time dashboard.</p>
+                <div class="features-list">
+                    <div class="feature-item">
+                        <div class="feature-icon">🛡️</div>
+                        <div>
+                            <strong>Automatic Compliance Check</strong>
+                            <span>Real-time warnings when proposing shifts that exceed daily, weekly, or monthly limits.</span>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">⚡</div>
+                        <div>
+                            <strong>Real-time Synchronized Queue</strong>
+                            <span>Superiors receive requests instantly and can modify, approve, or reject with reasons.</span>
+                        </div>
+                    </div>
+                    <div class="feature-item">
+                        <div class="feature-icon">✍️</div>
+                        <div>
+                            <strong>Digital Worker Consent</strong>
+                            <span>Assignments exceeding limits automatically trigger digital consent prompts for workers.</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="auth-form-side">
+                <h3 style="font-size: 1.5rem; font-weight: 700; margin-bottom: 8px;">Welcome Back</h3>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 24px;">Please sign in with your enterprise credentials.</p>
+                <form id="login-form">
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label for="login-username" style="color: var(--text-main); font-weight: 600;">Username or Email</label>
+                        <input type="text" id="login-username" class="dev-select" style="width: 100%; height: 46px; padding: 0 14px; background: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1; border-radius: 10px;" placeholder="jane.doe@clockplus.com" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 16px;">
+                        <label for="login-password" style="color: var(--text-main); font-weight: 600;">Password</label>
+                        <input type="password" id="login-password" class="dev-select" style="width: 100%; height: 46px; padding: 0 14px; background: #ffffff !important; color: #0f172a !important; border: 1px solid #cbd5e1; border-radius: 10px;" placeholder="••••••••" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" style="width: 100%; height: 46px; margin-top: 16px;">
+                        Sign In
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Company Selection Page -->
+    <div id="company-screen" class="auth-screen" style="display: none;">
+        <div class="company-card glass-panel">
+            <h2 style="font-size: 1.8rem; font-weight: 800; text-align: center; margin-bottom: 8px; color: var(--text-main);">Select a Company</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; text-align: center; margin-bottom: 32px;">Choose which enterprise workspace you would like to open.</p>
+            <div class="company-grid" id="company-grid-container">
+                <!-- Populated dynamically -->
+            </div>
+            <div style="display: flex; justify-content: center; margin-top: 24px;">
+                <button id="company-back-btn" class="btn btn-secondary btn-sm">Go Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Bottom Navigation Bar -->
+    <nav class="bottom-nav-bar" id="mobile-bottom-nav">
+        <!-- Dynamically injected by JS based on user role -->
+    </nav>
+
+    <!-- Core Logic Driver -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>
