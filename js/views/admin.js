@@ -798,15 +798,15 @@ export function renderAdminRequest(container) {
             rejectionReason: '',
             isSpecialRequest: isOverLimit,
             workerConsented: !isOverLimit,
-            approverId: isSuperiorOrAdmin ? (currentUser ? currentUser.id : approverId) : (approverId || null),
+            approverId: (initialStatus === 'Approved') ? (currentUser ? currentUser.id : approverId) : (approverId || null),
             type: 'request'
         };
 
         const createdReq = db.createRequest(reqData);
-        if (isSuperiorOrAdmin) {
-            showToast(`Overtime created and directly approved for team.`, "success");
+        if (initialStatus === 'Approved') {
+            showToast(`Overtime created and authorized.`, "success");
         } else {
-            showToast(`Overtime request submitted. Sent to your superior for approval.`, "success");
+            showToast(`Overtime request submitted for approval.`, "success");
         }
 
         // Show Full Pop-up Confirmation Dialog
