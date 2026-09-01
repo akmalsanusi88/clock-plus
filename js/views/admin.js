@@ -100,8 +100,11 @@ export function renderAdminDashboard(container) {
     const myAllRequests = requests.filter(r => 
         r.requesterId === currentUserId || (r.teamMembers && r.teamMembers.includes(currentUserId))
     );
-    const myApproved = myAllRequests.filter(r => r.status === 'Approved');
-    const myApprovedHours = myApproved.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+    const myApproved = myAllRequests.filter(r => r.status === 'Approved' || r.status === 'Completed');
+    const myApprovedHours = myApproved.reduce((acc, r) => {
+        const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+        return acc + (isNaN(h) ? 0 : h);
+    }, 0);
     const myLimits = currentUserId ? db.getWorkerLimits(currentUserId) : { monthlyMax: 104 };
     const myMonthlyMax = myLimits.monthlyMax || 104;
     const myRemainingHours = Math.max(0, myMonthlyMax - myApprovedHours);

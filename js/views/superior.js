@@ -58,7 +58,7 @@ export function renderSuperiorView(container, superiorId) {
                     <span class="badge ${myPercentage >= 90 ? 'badge-rejected' : (myPercentage >= 70 ? 'badge-pending' : 'badge-approved')}" style="font-size: 0.75rem;">${myPercentage}%</span>
                 </div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: var(--text-main); margin-top: 6px;">
-                    ${myApprovedHours.toFixed(1)} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">/ ${myMonthlyMax}h</span>
+                    ${myAuthorizedHours.toFixed(1)} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-muted);">/ ${myMonthlyMax}h</span>
                 </div>
                 <div style="background: rgba(226, 232, 240, 0.8); height: 6px; border-radius: 99px; margin-top: 10px; overflow: hidden;">
                     <div style="background: ${myProgressColor}; width: ${myPercentage}%; height: 100%; border-radius: 99px;"></div>
