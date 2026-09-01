@@ -348,10 +348,33 @@ export function openCloseOTModal(requestId, onDone) {
         document.body.appendChild(modal);
     }
 
-    const scheduledStartDate = req.dateStart || (req.startDate ? req.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
-    const scheduledEndDate = req.dateEnd || (req.endDate ? req.endDate.slice(0, 10) : scheduledStartDate);
-    const scheduledTimeStart = req.timeStart || '18:00';
-    const scheduledTimeEnd = req.timeEnd || '20:00';
+    const cleanTimeStr = (t, defaultVal = '18:00') => {
+        if (!t) return defaultVal;
+        let clean = String(t).trim();
+        if (clean.includes('T')) clean = clean.split('T')[1];
+        else if (clean.includes(' ')) clean = clean.split(' ')[1];
+        const parts = clean.split(':');
+        if (parts.length >= 2) {
+            const h = String(parseInt(parts[0], 10) || 0).padStart(2, '0');
+            const m = String(parseInt(parts[1], 10) || 0).padStart(2, '0');
+            return `${h}:${m}`;
+        }
+        return defaultVal;
+    };
+
+    const cleanDateStr = (d, defaultVal = new Date().toISOString().slice(0, 10)) => {
+        if (!d) return defaultVal;
+        let clean = String(d).trim();
+        if (clean.includes('T')) clean = clean.split('T')[0];
+        else if (clean.includes(' ')) clean = clean.split(' ')[0];
+        if (clean.length === 10 && clean.includes('-')) return clean;
+        return defaultVal;
+    };
+
+    const scheduledStartDate = cleanDateStr(req.dateStart || req.startDate);
+    const scheduledEndDate = cleanDateStr(req.dateEnd || req.endDate || req.startDate);
+    const scheduledTimeStart = cleanTimeStr(req.timeStart || req.startDate, '18:00');
+    const scheduledTimeEnd = cleanTimeStr(req.timeEnd || req.endDate, '20:00');
 
     const project = db.getProject(req.project);
     const projectName = project ? project.name : (req.project || 'Project');
@@ -379,7 +402,7 @@ export function openCloseOTModal(requestId, onDone) {
                 </div>
                 <div style="display: flex; justify-content: space-between;">
                     <span style="color: var(--text-muted);">Scheduled Plan:</span>
-                    <span style="font-weight: 600; color: var(--text-main);">${scheduledStartDate} ${scheduledTimeStart} &rarr; ${scheduledEndDate} ${scheduledTimeEnd} (${Number(req.duration || 0).toFixed(1)}h)</span>
+                    <span style="font-weight: 600; color: var(--text-main);">${formatDateTime(req.startDate || req.dateStart)} &rarr; ${formatDateTime(req.endDate || req.dateEnd)} (${Number(req.duration || 0).toFixed(1)}h)</span>
                 </div>
             </div>
 
@@ -438,19 +461,40 @@ export function openCloseOTModal(requestId, onDone) {
     const btnCancel = document.getElementById('btn-cancel-close-ot');
     const btnX = document.getElementById('btn-close-ot-modal-x');
 
+    const parseCombinedDateTime = (dStr, tStr) => {
+        if (!dStr || !tStr) return null;
+        const cleanT = cleanTimeStr(tStr);
+        const isoString = `${dStr}T${cleanT}:00`;
+        const dt = new Date(isoString);
+        if (!isNaN(dt.getTime())) return dt;
+
+        const fallback = new Date(`${dStr} ${cleanT}`);
+        if (!isNaN(fallback.getTime())) return fallback;
+        return null;
+    };
+
     const updateActualCalculation = () => {
         const dStart = dateStartIn.value;
-        const tStart = timeStartIn.value;
+        const tStart = cleanTimeStr(timeStartIn.value);
         const dEnd = dateEndIn.value;
-        const tEnd = timeEndIn.value;
+        const tEnd = cleanTimeStr(timeEndIn.value);
 
         if (!dStart || !tStart || !dEnd || !tEnd) {
             calcFeedback.innerHTML = `<span style="color:var(--text-muted);">Please fill in start and end times.</span>`;
             return { valid: false };
         }
 
-        const startObj = new Date(`${dStart}T${tStart}:00`);
-        const endObj = new Date(`${dEnd}T${tEnd}:00`);
+        const startObj = parseCombinedDateTime(dStart, tStart);
+        const endObj = parseCombinedDateTime(dEnd, tEnd);
+
+        if (!startObj || !endObj) {
+            calcFeedback.style.background = '#fef2f2';
+            calcFeedback.style.borderColor = '#fecaca';
+            calcFeedback.style.color = '#991b1b';
+            calcFeedback.innerHTML = `⚠️ <strong>Invalid date/time format:</strong> Please check your inputs.`;
+            return { valid: false };
+        }
+
         const grossHours = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
 
         if (isNaN(grossHours) || grossHours <= 0) {
