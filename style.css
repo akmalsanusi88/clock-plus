@@ -1583,6 +1583,29 @@ strong svg,
         display: none !important;
     }
 
+    .header-left, .header-right {
+        gap: 6px !important;
+    }
+
+    .logo-icon {
+        width: 30px !important;
+        height: 30px !important;
+        font-size: 0.85rem !important;
+    }
+
+    .logo-text {
+        font-size: 1.05rem !important;
+    }
+
+    #header-company-badge {
+        font-size: 0.68rem !important;
+        padding: 2px 6px !important;
+        max-width: 85px !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
+        white-space: nowrap !important;
+    }
+
     /* Compact Header User Pill on mobile: keep avatar, hide long name text to leave room for Notifications */
     .header-user-pill {
         padding: 0 !important;
