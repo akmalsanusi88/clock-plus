@@ -135,12 +135,32 @@ header {
     background: var(--primary-glow);
 }
 
-/* Floating Navigation Bubble Popover */
+/* Header User Profile Info Badge Beside Notifications */
+.header-user-pill {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 12px 4px 5px;
+    background: var(--bg-surface-opaque);
+    border: 1.5px solid var(--border-color);
+    border-radius: 30px;
+    transition: all var(--transition-fast);
+    user-select: none;
+}
+
+.header-avatar {
+    background: linear-gradient(135deg, #4f46e5, #ec4899);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+}
+
+/* Floating Navigation Bubble Popover (Anchored under left Menu button) */
 .nav-bubble-popover {
     position: absolute;
     top: calc(100% + 10px);
     left: 110px;
-    width: 270px;
+    right: auto;
+    width: 275px;
     background: #ffffff;
     border: 1px solid var(--border-color);
     border-radius: 18px;

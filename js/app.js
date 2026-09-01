@@ -2,7 +2,7 @@ import { db } from './db.js';
 import { renderAdminView, renderAdminRequest, renderAdminReport } from './views/admin.js';
 import { renderWorkerView } from './views/worker.js';
 import { renderSuperiorView } from './views/superior.js';
-import { showToast, formatDateTime, icons } from './views/shared.js';
+import { showToast, showRequestDecisionModal, formatDateTime, icons } from './views/shared.js';
 
 // Application State
 const state = {
@@ -18,19 +18,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     initResponsiveNav();
     initLoginScreen(); // Bind submit event immediately on page load
 
-    const trySessionRestore = async () => {
-        const user = await db.getActiveSessionUser();
-        const savedCompany = localStorage.getItem('clock_plus_session_company');
+    // If an active session exists in localStorage, immediately remain in app stage
+    const existingUserId = localStorage.getItem('clock_plus_session_user_id');
+    if (existingUserId) {
+        setStage('app');
+    }
 
-        if (user && savedCompany) {
+    const trySessionRestore = async () => {
+        const user = db.getCurrentUser() || await db.getActiveSessionUser();
+
+        if (user) {
+            let savedCompany = localStorage.getItem('clock_plus_session_company');
+            let savedCompanyId = localStorage.getItem('clock_plus_session_company_id');
+            if (!savedCompany || !savedCompanyId) {
+                const userCompanies = db.getUserCompanies(user.id);
+                if (userCompanies && userCompanies.length > 0) {
+                    savedCompany = userCompanies[0].name;
+                    savedCompanyId = userCompanies[0].id;
+                    localStorage.setItem('clock_plus_session_company', savedCompany);
+                    localStorage.setItem('clock_plus_session_company_id', savedCompanyId);
+                }
+            }
+
+            const savedView = localStorage.getItem('clock_plus_last_view');
+            if (savedView) {
+                state.currentView = savedView;
+            }
+
             state.currentUser = user;
-            state.currentCompany = savedCompany;
+            state.currentCompany = savedCompany || 'Testing';
             switchUser(user.id);
             setStage('app');
             return true;
         }
 
-        // Default to showing the login stage immediately
+        // Only show login screen if no session exists
         setStage('auth');
         return false;
     };
@@ -39,7 +61,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.addEventListener('clock_plus_db_update', () => {
         renderCompanies();
-        if (!state.currentUser && !restored) {
+        if (!state.currentUser && !restored && !localStorage.getItem('clock_plus_session_user_id')) {
             setStage('auth');
         }
     });
@@ -137,10 +159,15 @@ function renderCompanies() {
 // Logout controller
 function logout() {
     localStorage.removeItem('clock_plus_session_user_id');
+    localStorage.removeItem('clock_plus_session_user_email');
     localStorage.removeItem('clock_plus_session_company');
     localStorage.removeItem('clock_plus_session_company_id');
+    localStorage.removeItem('clock_plus_last_view');
     state.currentUser = null;
     state.currentCompany = null;
+    try {
+        supabase.auth.signOut().then();
+    } catch (e) {}
     setStage('auth');
     showToast("Signed out successfully.", "info");
 }
@@ -165,18 +192,16 @@ function switchUser(userId) {
         }
     }
 
-    // Update Bubble Menu User Header
-    const bubbleUserHeader = document.getElementById('bubble-user-header');
-    if (bubbleUserHeader) {
-        const initials = (user.name || 'User').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-        bubbleUserHeader.innerHTML = `
-            <div class="avatar" style="width: 38px; height: 38px; font-size: 0.95rem;">${initials}</div>
-            <div style="min-width: 0; flex-grow: 1;">
-                <div style="font-weight: 700; font-size: 0.92rem; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${user.name}</div>
-                <div style="font-size: 0.78rem; color: var(--text-muted); text-transform: capitalize;">${user.role} (${user.position || 'Staff'})</div>
-            </div>
-        `;
-    }
+    // Update Header User Profile Pill on Top-Right
+    const initials = (user.name || user.email || 'User').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
+    const rolePositionText = `${user.role === 'superior' ? 'Superior' : (user.role === 'admin' ? 'Admin' : 'Worker')} (${user.position || 'Staff'})`;
+
+    const headerAvatar = document.getElementById('header-avatar');
+    const headerUserName = document.getElementById('header-user-name');
+    const headerUserRole = document.getElementById('header-user-role');
+    if (headerAvatar) headerAvatar.innerText = initials;
+    if (headerUserName) headerUserName.innerText = user.name || user.email || 'User';
+    if (headerUserRole) headerUserRole.innerText = rolePositionText;
 
     // Render Navigation based on User Role
     renderNavigation(user);
@@ -364,7 +389,7 @@ function renderNavigation(user) {
     renderActiveView();
 }
 
-// Bubble Menu Popover Controller
+// Bubble Menu Popover Controller (Anchored under left Menu button)
 function closeBubbleMenu() {
     const bubblePopover = document.getElementById('nav-bubble-popover');
     const bubbleToggle = document.getElementById('nav-bubble-toggle');
@@ -372,24 +397,32 @@ function closeBubbleMenu() {
     if (bubbleToggle) bubbleToggle.classList.remove('active');
 }
 
+function toggleBubbleMenu(e) {
+    if (e) e.stopPropagation();
+    const bubblePopover = document.getElementById('nav-bubble-popover');
+    const bubbleToggle = document.getElementById('nav-bubble-toggle');
+    if (!bubblePopover) return;
+
+    const isActive = bubblePopover.classList.contains('active');
+    if (isActive) {
+        closeBubbleMenu();
+    } else {
+        bubblePopover.classList.add('active');
+        if (bubbleToggle) bubbleToggle.classList.add('active');
+    }
+}
+
 const bubbleToggle = document.getElementById('nav-bubble-toggle');
 const bubblePopover = document.getElementById('nav-bubble-popover');
 const bubbleLogoutBtn = document.getElementById('bubble-logout-btn');
 
-if (bubbleToggle && bubblePopover) {
-    bubbleToggle.onclick = (e) => {
-        e.stopPropagation();
-        const isActive = bubblePopover.classList.contains('active');
-        if (isActive) {
-            closeBubbleMenu();
-        } else {
-            bubblePopover.classList.add('active');
-            bubbleToggle.classList.add('active');
-        }
-    };
+if (bubbleToggle) bubbleToggle.onclick = toggleBubbleMenu;
 
+if (bubblePopover) {
     document.addEventListener('click', (e) => {
-        if (!bubblePopover.contains(e.target) && e.target !== bubbleToggle && !bubbleToggle.contains(e.target)) {
+        const isClickInside = bubblePopover.contains(e.target) || 
+                              (bubbleToggle && bubbleToggle.contains(e.target));
+        if (!isClickInside) {
             closeBubbleMenu();
         }
     });
@@ -410,20 +443,21 @@ function renderActiveView() {
 
     if (!container || !user) return;
 
+    if (state.currentView) {
+        localStorage.setItem('clock_plus_last_view', state.currentView);
+    }
+
     if (state.currentView.startsWith('admin-') || state.currentView === 'admin') {
         let subview = 'dashboard';
         if (state.currentView === 'admin-request' || state.currentView === 'request') subview = 'request';
         else if (state.currentView === 'admin-report' || state.currentView === 'report') subview = 'report';
         else if (state.currentView === 'admin-settings' || state.currentView === 'settings') subview = 'settings';
 
-        if (subview === 'request') {
-            pageTitle.innerText = "Schedule & Assign Overtime";
-        } else if (subview === 'report') {
-            pageTitle.innerText = "Overtime Timesheets & Compliance Reports";
-        } else if (subview === 'settings') {
-            pageTitle.innerText = "Settings & User Account Administration";
-        } else {
-            pageTitle.innerText = "Enterprise Overtime Dashboard";
+        if (pageTitle) {
+            if (subview === 'request') pageTitle.innerText = "Schedule & Assign Overtime";
+            else if (subview === 'report') pageTitle.innerText = "Overtime Timesheets & Compliance Reports";
+            else if (subview === 'settings') pageTitle.innerText = "Settings & User Account Administration";
+            else pageTitle.innerText = "Enterprise Overtime Dashboard";
         }
         renderAdminView(container, subview);
     } else if (state.currentView.startsWith('superior-') || state.currentView === 'superior') {
@@ -432,17 +466,20 @@ function renderActiveView() {
         else if (state.currentView === 'superior-report') subview = 'report';
         else if (state.currentView === 'superior-settings') subview = 'settings';
 
+        if (pageTitle) {
+            if (subview === 'request') pageTitle.innerText = "Schedule & Request Overtime";
+            else if (subview === 'report') pageTitle.innerText = "Overtime Timesheets & Compliance Reports";
+            else if (subview === 'settings') pageTitle.innerText = "Personal Account & Profile Settings";
+            else pageTitle.innerText = "Overtime Approval & Team Assign";
+        }
+
         if (subview === 'request') {
-            pageTitle.innerText = "Schedule & Request Overtime";
             renderAdminRequest(container);
         } else if (subview === 'report') {
-            pageTitle.innerText = "Overtime Timesheets & Compliance Reports";
             renderAdminReport(container);
         } else if (subview === 'settings') {
-            pageTitle.innerText = "Personal Account & Profile Settings";
             renderAdminView(container, 'settings');
         } else {
-            pageTitle.innerText = "Overtime Approval & Team Assign";
             renderSuperiorView(container, user.id);
         }
     } else if (state.currentView.startsWith('worker-') || state.currentView === 'worker') {
@@ -451,17 +488,20 @@ function renderActiveView() {
         else if (state.currentView === 'worker-report') subview = 'report';
         else if (state.currentView === 'worker-settings') subview = 'settings';
 
+        if (pageTitle) {
+            if (subview === 'request') pageTitle.innerText = "Submit Overtime Request";
+            else if (subview === 'report') pageTitle.innerText = "Overtime Timesheets & Compliance Reports";
+            else if (subview === 'settings') pageTitle.innerText = "Personal Account & Profile Settings";
+            else pageTitle.innerText = "Employee Overtime Dashboard";
+        }
+
         if (subview === 'request') {
-            pageTitle.innerText = "Submit Overtime Request";
             renderAdminRequest(container);
         } else if (subview === 'report') {
-            pageTitle.innerText = "Overtime Timesheets & Compliance Reports";
             renderAdminReport(container);
         } else if (subview === 'settings') {
-            pageTitle.innerText = "Personal Account & Profile Settings";
             renderAdminView(container, 'settings');
         } else {
-            pageTitle.innerText = "Employee Overtime Dashboard";
             renderWorkerView(container, user.id);
         }
     }
@@ -793,7 +833,12 @@ export function openRequestReviewModal(requestId) {
                 return;
             }
             btnApprove.disabled = false;
-            compIndicator.innerHTML = `<div class="info-alert info-alert-success" style="margin-bottom:0; font-size:0.8rem;">Schedule valid: <strong>${range.duration.toFixed(1)} hours</strong>.</div>`;
+            const otCalc = db.calculateNetOvertime(range.duration);
+            let restNote = '';
+            if (otCalc.ruleApplied && otCalc.restDeducted > 0) {
+                restNote = ` <span style="color:var(--text-muted); font-size:0.76rem;">(Gross: ${otCalc.grossHours.toFixed(1)}h, Rest: -${otCalc.restDeducted.toFixed(1)}h)</span>`;
+            }
+            compIndicator.innerHTML = `<div class="info-alert info-alert-success" style="margin-bottom:0; font-size:0.8rem;">Schedule valid: <strong>${otCalc.netHours.toFixed(1)} claimable hours</strong>${restNote}.</div>`;
         };
 
         dsInput.onchange = () => {
@@ -812,21 +857,27 @@ export function openRequestReviewModal(requestId) {
                 showToast("Please specify a valid schedule before approving.", "error");
                 return;
             }
+            const otCalc = db.calculateNetOvertime(range.duration);
             const remarks = remarksInput.value.trim();
-            db.updateRequest(req.id, {
+            const updated = db.updateRequest(req.id, {
                 startDate: range.startISO,
                 endDate: range.endISO,
                 dateStart: range.ds,
                 dateEnd: range.de,
                 timeStart: range.ts,
                 timeEnd: range.te,
-                duration: range.duration,
+                duration: otCalc.netHours,
+                grossDuration: otCalc.grossHours,
+                restDeduction: otCalc.restDeducted,
                 approverRemarks: remarks,
                 status: 'Approved'
             }, currentUser.id, 'Approved request');
 
             modal.classList.remove('active');
             showToast(`Request ${req.id} has been Approved with remarks.`, "success");
+            showRequestDecisionModal(updated || req, 'Approved', () => {
+                renderActiveView();
+            });
         };
 
         // Reject Action
@@ -845,13 +896,16 @@ export function openRequestReviewModal(requestId) {
                 rejectReasonInput.focus();
                 return;
             }
-            db.updateRequest(req.id, {
+            const updated = db.updateRequest(req.id, {
                 status: 'Rejected',
                 rejectionReason: reason
             }, currentUser.id, `Rejected request. Reason: ${reason}`);
 
             modal.classList.remove('active');
             showToast(`Request ${req.id} rejected.`, "info");
+            showRequestDecisionModal(updated || req, 'Rejected', () => {
+                renderActiveView();
+            });
         };
     }
 }

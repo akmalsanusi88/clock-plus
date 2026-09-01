@@ -1,6 +1,6 @@
 // Clock+ Admin View Controller - 4 Dedicated Pages (Dashboard, Request, Report, Settings)
 import { db } from '../db.js';
-import { showToast, formatDateTime, formatDateOnly, icons } from './shared.js';
+import { showToast, showRequestSubmittedModal, showRequestDecisionModal, formatDateTime, formatDateOnly, icons } from './shared.js';
 
 export function renderAdminView(container, subview = 'dashboard') {
     if (subview === 'request') {
@@ -418,9 +418,12 @@ export function renderAdminDashboard(container) {
             btn.onclick = () => {
                 const reqId = btn.dataset.id;
                 try {
-                    db.updateRequest(reqId, { status: 'Approved' }, currentUserId, 'Approved request');
+                    const req = db.getRequest(reqId);
+                    const updated = db.updateRequest(reqId, { status: 'Approved' }, currentUserId, 'Approved request');
                     showToast(`Overtime request ${reqId} approved successfully.`, "success");
-                    renderAdminDashboard(container);
+                    showRequestDecisionModal(updated || req, 'Approved', () => {
+                        renderAdminDashboard(container);
+                    });
                 } catch (e) {
                     showToast(e.message || "Failed to approve request", "error");
                 }
@@ -633,6 +636,7 @@ export function renderAdminRequest(container) {
         }
 
         submitBtn.disabled = false;
+        const otCalc = db.calculateNetOvertime(range.duration);
         let anyExceeded = false;
         const violatorNames = [];
 
@@ -647,16 +651,29 @@ export function renderAdminRequest(container) {
 
         isOverLimit = anyExceeded;
 
+        let breakdownHtml = '';
+        if (otCalc.ruleApplied && otCalc.restDeducted > 0) {
+            breakdownHtml = `
+                <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(0,0,0,0.06); display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.82rem;">
+                    <span>Gross Time: <strong>${otCalc.grossHours.toFixed(1)} hrs</strong></span>
+                    <span>Rest Deduction: <strong style="color: #ef4444;">-${otCalc.restDeducted.toFixed(1)} hrs</strong> (${otCalc.breakCount} rest break${otCalc.breakCount > 1 ? 's' : ''})</span>
+                    <span>Net Claimable OT: <strong style="color: var(--primary);">${otCalc.netHours.toFixed(1)} hrs</strong></span>
+                </div>
+            `;
+        }
+
         if (isOverLimit) {
             complianceContainer.innerHTML = `
                 <div class="info-alert info-alert-warning">
-                    <span style="font-size: 0.88rem;"><strong>Limit Warning:</strong> Overtime limit (104 hrs/mo) will be exceeded for: <strong>${violatorNames.join(', ')}</strong> (${range.duration.toFixed(1)}h requested). Will be submitted as a Special Request requiring digital consent.</span>
+                    <span style="font-size: 0.88rem;"><strong>Limit Warning:</strong> Overtime limit (104 hrs/mo) will be exceeded for: <strong>${violatorNames.join(', ')}</strong> (${otCalc.netHours.toFixed(1)}h claimable). Will be submitted as a Special Request requiring digital consent.</span>
+                    ${breakdownHtml}
                 </div>
             `;
         } else {
             complianceContainer.innerHTML = `
                 <div class="info-alert info-alert-success">
-                    ${icons.check} <span>Session is within standard compliance limits (${range.duration.toFixed(1)} hours for ${selectedWorkerIds.length} employee${selectedWorkerIds.length > 1 ? 's' : ''}).</span>
+                    ${icons.check} <span>Session is within standard compliance limits (<strong>${otCalc.netHours.toFixed(1)} claimable hours</strong> for ${selectedWorkerIds.length} employee${selectedWorkerIds.length > 1 ? 's' : ''}).</span>
+                    ${breakdownHtml}
                 </div>
             `;
         }
@@ -682,6 +699,7 @@ export function renderAdminRequest(container) {
             return;
         }
 
+        const otCalc = db.calculateNetOvertime(range.duration);
         const projectId = projectInput.value.trim();
         const workProgress = progressInput.value.trim();
         const targetWork = targetInput.value.trim();
@@ -717,7 +735,9 @@ export function renderAdminRequest(container) {
             timeEnd,
             startDate: range.startISO,
             endDate: range.endISO,
-            duration: range.duration,
+            duration: otCalc.netHours,
+            grossDuration: otCalc.grossHours,
+            restDeduction: otCalc.restDeducted,
             teamMembers,
             status: initialStatus,
             rejectionReason: '',
@@ -727,12 +747,16 @@ export function renderAdminRequest(container) {
             type: 'request'
         };
 
-        db.createRequest(reqData);
+        const createdReq = db.createRequest(reqData);
         if (isSuperiorOrAdmin) {
             showToast(`Overtime created and directly approved for team.`, "success");
         } else {
             showToast(`Overtime request submitted. Sent to your superior for approval.`, "success");
         }
+
+        // Show Full Pop-up Confirmation Dialog
+        showRequestSubmittedModal(createdReq);
+
         form.reset();
 
         // Reset default dates
@@ -1754,7 +1778,7 @@ export function renderAdminSettings(container) {
         <!-- TAB 2: Multi-Level Approver Hierarchy Mapping -->
         <div id="tab-hierarchy" class="settings-tab-pane" style="display: none;">
             <div class="card glass-panel">
-                <div class="card-header" style="margin-bottom: 8px;">
+                <div class="card-header" style="margin-bottom: 16px;">
                     <div>
                         <h2 class="card-title">${icons.hierarchy} Multi-Level Approver Hierarchy Mapping</h2>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
@@ -1762,44 +1786,96 @@ export function renderAdminSettings(container) {
                         </p>
                     </div>
                 </div>
+
                 <div class="table-container">
                     <table>
                         <thead>
                             <tr>
-                                <th style="min-width: 180px;">Worker / Employee</th>
-                                <th style="min-width: 200px;">Level 1 Approver (Primary)</th>
-                                <th style="min-width: 200px;">Level 2 Approver (Secondary)</th>
-                                <th style="min-width: 200px;">Level 3 Approver (Final)</th>
-                                <th style="min-width: 180px;">Approval Route</th>
+                                <th>Worker / Employee</th>
+                                <th>Level 1 Approver (Primary)</th>
+                                <th>Level 2 Approver (Secondary)</th>
+                                <th>Level 3 Approver (Final)</th>
+                                <th>Approval Route</th>
                             </tr>
                         </thead>
                         <tbody id="settings-hierarchy-list">
-                            <!-- Injected dynamically -->
+                            <!-- Dynamic Hierarchy Mapping Rows -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- TAB 3: Overtime Limit Thresholds -->
+        <!-- TAB 3: Overtime Limit Thresholds & Rest Deductions -->
         <div id="tab-limits" class="settings-tab-pane" style="display: none;">
-            <div class="card glass-panel" style="max-width: 600px;">
-                <div class="card-header">
-                    <h2 class="card-title">${icons.limits} Compliance Hour Thresholds</h2>
+            <div class="card glass-panel" style="max-width: 680px;">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <h2 class="card-title">${icons.limits} Compliance Hour Thresholds & Rest Deductions</h2>
                 </div>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 16px;">
-                    Set the statutory monthly overtime limit per employee under the Malaysia Employment Act 1955.
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 20px;">
+                    Configure statutory overtime limits and automated rest/meal break deduction rules for overtime sessions.
                 </p>
                 <form id="settings-limits-form">
-                    <div class="form-group">
-                        <label for="limit-monthly">Monthly Maximum Overtime (Hours)</label>
-                        <input type="number" step="1" id="limit-monthly" required style="background:#ffffff !important; color:#0f172a !important;" placeholder="104">
-                        <span style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px;">
-                            Under Malaysia Employment Act 1955, statutory overtime cannot exceed 104 hours in a single month.
-                        </span>
+                    <!-- 1. Monthly Overtime Cap -->
+                    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 18px;">
+                        <h3 style="font-size: 0.95rem; font-weight: 700; margin-bottom: 8px; color: var(--text-main); display: flex; align-items: center; gap: 8px;">
+                            ${icons.limits} Statutory Monthly Overtime Cap
+                        </h3>
+                        <div class="form-group" style="margin-bottom: 4px;">
+                            <label for="limit-monthly" style="font-weight: 600;">Monthly Maximum Overtime (Hours)</label>
+                            <input type="number" step="1" id="limit-monthly" required style="background:#ffffff !important; color:#0f172a !important;" placeholder="104">
+                            <span style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; display: block;">
+                                Under Malaysia Employment Act 1955, statutory overtime cannot exceed 104 hours in a single month.
+                            </span>
+                        </div>
                     </div>
-                    <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
-                        <button type="submit" class="btn btn-primary btn-sm">Save Threshold</button>
+
+                    <!-- 2. Automatic Rest / Break Deduction Rule -->
+                    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 18px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                            <h3 style="font-size: 0.95rem; font-weight: 700; color: var(--text-main); margin: 0; display: flex; align-items: center; gap: 8px;">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:18px;height:18px;color:var(--primary);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                Automatic Rest Time Deduction
+                            </h3>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; font-weight: 600; cursor: pointer;">
+                                <input type="checkbox" id="limit-rest-enabled" checked style="width: 16px; height: 16px; cursor: pointer;">
+                                <span>Enable Rule</span>
+                            </label>
+                        </div>
+                        <p style="font-size: 0.82rem; color: var(--text-muted); margin-bottom: 14px;">
+                            Automatically deduct mandatory rest/break hours when an overtime session reaches or exceeds a specified hour threshold.
+                        </p>
+
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="limit-rest-threshold" style="font-weight: 600; font-size: 0.84rem;">For every OT Duration (Hours)</label>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="number" step="0.5" min="1" id="limit-rest-threshold" value="5" required style="background:#ffffff !important; color:#0f172a !important;">
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">hrs</span>
+                                </div>
+                            </div>
+
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="limit-rest-deduct" style="font-weight: 600; font-size: 0.84rem;">Deduct Rest Time (Hours)</label>
+                                <div style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="number" step="0.1" min="0.1" id="limit-rest-deduct" value="0.5" required style="background:#ffffff !important; color:#0f172a !important;">
+                                    <span style="font-size: 0.85rem; color: var(--text-muted); font-weight: 600;">hrs</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Live Rule Example Preview -->
+                        <div id="rest-rule-live-preview" style="background: rgba(99, 102, 241, 0.07); border: 1px dashed rgba(99, 102, 241, 0.35); border-radius: 8px; padding: 10px 14px; font-size: 0.8rem; color: var(--text-main);">
+                            <strong>Active Rule:</strong> Every <strong>5.0 hours</strong> of overtime will deduct <strong>0.5 hours</strong> (30 mins) as rest time.
+                            <div style="margin-top: 4px; color: var(--text-muted);">
+                                • 5.0 hrs worked &rarr; <strong>4.5 hrs</strong> claimable OT<br>
+                                • 10.0 hrs worked &rarr; <strong>9.0 hrs</strong> claimable OT
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button type="submit" class="btn btn-primary btn-sm" style="padding: 8px 20px; font-weight: 600;">Save Threshold & Rules</button>
                     </div>
                 </form>
             </div>
@@ -2111,23 +2187,75 @@ export function renderAdminSettings(container) {
         });
     };
 
-    // Load Limits
+    // Load Limits & Rest Deduction Rules
     const limitsList = db.getLimits() || [];
     const globalLimits = limitsList.find(l => l.scope === 'global') || { monthlyMax: 104 };
-    document.getElementById('limit-monthly').value = globalLimits.monthlyMax || 104;
+    const restRule = db.getRestDeductionRule();
+
+    const inputMonthly = document.getElementById('limit-monthly');
+    const inputRestEnabled = document.getElementById('limit-rest-enabled');
+    const inputRestThreshold = document.getElementById('limit-rest-threshold');
+    const inputRestDeduct = document.getElementById('limit-rest-deduct');
+    const restLivePreview = document.getElementById('rest-rule-live-preview');
+
+    if (inputMonthly) inputMonthly.value = globalLimits.monthlyMax || 104;
+    if (inputRestEnabled) inputRestEnabled.checked = restRule.enabled !== false;
+    if (inputRestThreshold) inputRestThreshold.value = restRule.thresholdHours || 5;
+    if (inputRestDeduct) inputRestDeduct.value = restRule.deductHours || 0.5;
+
+    const updateRestLivePreview = () => {
+        if (!restLivePreview) return;
+        const isEnabled = inputRestEnabled ? inputRestEnabled.checked : true;
+        const thresh = Number(inputRestThreshold?.value) || 5;
+        const deduct = Number(inputRestDeduct?.value) || 0.5;
+
+        if (!isEnabled) {
+            restLivePreview.innerHTML = `
+                <div style="color: #64748b;">
+                    <strong>Rest Rule Status:</strong> Disabled (No automatic deduction applied; workers claim 100% gross hours).
+                </div>
+            `;
+            return;
+        }
+
+        const sample1Deduct = Math.floor(thresh / thresh) * deduct;
+        const sample1Net = Math.max(0, thresh - sample1Deduct);
+        const sample2Gross = thresh * 2;
+        const sample2Deduct = Math.floor(sample2Gross / thresh) * deduct;
+        const sample2Net = Math.max(0, sample2Gross - sample2Deduct);
+
+        restLivePreview.innerHTML = `
+            <strong>Active Rule:</strong> Every <strong>${thresh.toFixed(1)} hours</strong> of overtime will deduct <strong>${deduct.toFixed(1)} hours</strong> (${Math.round(deduct * 60)} mins) as rest time.
+            <div style="margin-top: 4px; color: var(--text-muted);">
+                • ${thresh.toFixed(1)} hrs worked &rarr; <strong>${sample1Net.toFixed(1)} hrs</strong> claimable OT (-${sample1Deduct.toFixed(1)}h rest)<br>
+                • ${sample2Gross.toFixed(1)} hrs worked &rarr; <strong>${sample2Net.toFixed(1)} hrs</strong> claimable OT (-${sample2Deduct.toFixed(1)}h rest)
+            </div>
+        `;
+    };
+
+    if (inputRestEnabled) inputRestEnabled.onchange = updateRestLivePreview;
+    if (inputRestThreshold) inputRestThreshold.oninput = updateRestLivePreview;
+    if (inputRestDeduct) inputRestDeduct.oninput = updateRestLivePreview;
+    updateRestLivePreview();
 
     limitsForm.onsubmit = async (e) => {
         e.preventDefault();
-        const monthlyMax = Number(document.getElementById('limit-monthly').value) || 104;
+        const monthlyMax = Number(inputMonthly ? inputMonthly.value : 104) || 104;
+        const restEnabled = inputRestEnabled ? inputRestEnabled.checked : true;
+        const restThreshold = Number(inputRestThreshold ? inputRestThreshold.value : 5) || 5;
+        const restDeduct = Number(inputRestDeduct ? inputRestDeduct.value : 0.5) || 0.5;
 
         await db.saveLimit({
             id: 'global-default',
             scope: 'global',
             targetId: null,
-            monthlyMax
+            monthlyMax,
+            restDeductionEnabled: restEnabled,
+            restThresholdHours: restThreshold,
+            restDeductHours: restDeduct
         });
 
-        showToast("Monthly compliance threshold saved to Supabase.", "success");
+        showToast("Compliance threshold and rest deduction rule saved successfully.", "success");
     };
 
     loadUsers();

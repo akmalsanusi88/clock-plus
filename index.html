@@ -44,11 +44,8 @@
                 <span>Menu</span>
             </button>
 
-            <!-- Floating Menu Bubble Popover -->
+            <!-- Floating Menu Bubble Popover (Anchored under Menu button) -->
             <div class="nav-bubble-popover" id="nav-bubble-popover">
-                <div class="bubble-user-header" id="bubble-user-header">
-                    <!-- Injected by JS: Avatar, Name, Email, Position -->
-                </div>
                 <div class="bubble-menu-items" id="bubble-menu-items">
                     <!-- Navigation links injected by JS -->
                 </div>
@@ -59,36 +56,43 @@
                     </button>
                 </div>
             </div>
-
-            <div id="page-title-area" style="margin-left: 8px;">
-                <h1 class="view-title" id="page-title" style="font-size: 1.25rem; font-weight: 700; margin: 0;">Dashboard</h1>
-            </div>
         </div>
 
-        <!-- Notifications Bell -->
-        <!-- Notifications Bell & Bubble Popover -->
-        <div class="dev-panel" style="position: relative;">
-            <div class="notification-bell-container" id="notif-bell" title="Notifications">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:24px;height:24px;color:var(--text-main);">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
-                <span class="notification-badge" id="notif-badge" style="display: none;">0</span>
+        <!-- Right Side: User Profile Detail & Notifications Bell -->
+        <div style="display: flex; align-items: center; gap: 14px; position: relative;">
+            <!-- Header User Profile Info Badge -->
+            <div class="header-user-pill" id="header-user-pill" title="Current User Profile">
+                <div class="avatar header-avatar" id="header-avatar" style="width: 34px; height: 34px; font-size: 0.85rem; font-weight: 700;">U</div>
+                <div class="header-user-info" style="display: flex; flex-direction: column; line-height: 1.2;">
+                    <span class="header-user-name" id="header-user-name" style="font-weight: 700; font-size: 0.86rem; color: var(--text-main); max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">User</span>
+                    <span class="header-user-role" id="header-user-role" style="font-size: 0.72rem; color: var(--text-muted); text-transform: capitalize;">Staff</span>
+                </div>
             </div>
 
-            <!-- Floating Notification Bubble Popover -->
-            <div class="notif-bubble-popover" id="notifications-popover">
-                <div class="notif-popover-header">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                        <span style="font-weight:700; font-size:0.95rem; color:var(--text-main);">Notifications</span>
-                        <span class="badge badge-pending" id="notif-popover-unread-count" style="display:none; font-size:0.72rem; padding: 2px 7px;">0</span>
-                    </div>
-                    <div style="display:flex; gap:6px; align-items:center;">
-                        <button class="btn btn-secondary btn-sm" id="btn-mark-all-read" style="font-size:0.72rem; padding:3px 7px; border-radius:6px;">Mark all read</button>
-                        <button class="btn btn-secondary btn-sm" id="btn-clear-all-notifs" style="font-size:0.72rem; padding:3px 7px; border-radius:6px; color:#ef4444;" title="Delete all notifications">Clear all</button>
-                    </div>
+            <!-- Notifications Bell & Bubble Popover -->
+            <div class="dev-panel" style="position: relative;">
+                <div class="notification-bell-container" id="notif-bell" title="Notifications">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:24px;height:24px;color:var(--text-main);">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+                    </svg>
+                    <span class="notification-badge" id="notif-badge" style="display: none;">0</span>
                 </div>
-                <div class="notif-popover-list" id="drawer-notifications-list">
-                    <!-- Notifications injected dynamically -->
+
+                <!-- Floating Notification Bubble Popover -->
+                <div class="notif-bubble-popover" id="notifications-popover" style="right: 0; left: auto;">
+                    <div class="notif-popover-header">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span style="font-weight:700; font-size:0.95rem; color:var(--text-main);">Notifications</span>
+                            <span class="badge badge-pending" id="notif-popover-unread-count" style="display:none; font-size:0.72rem; padding: 2px 7px;">0</span>
+                        </div>
+                        <div style="display:flex; gap:6px; align-items:center;">
+                            <button class="btn btn-secondary btn-sm" id="btn-mark-all-read" style="font-size:0.72rem; padding:3px 7px; border-radius:6px;">Mark all read</button>
+                            <button class="btn btn-secondary btn-sm" id="btn-clear-all-notifs" style="font-size:0.72rem; padding:3px 7px; border-radius:6px; color:#ef4444;" title="Delete all notifications">Clear all</button>
+                        </div>
+                    </div>
+                    <div class="notif-popover-list" id="drawer-notifications-list">
+                        <!-- Notifications injected dynamically -->
+                    </div>
                 </div>
             </div>
         </div>

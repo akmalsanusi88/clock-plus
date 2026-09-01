@@ -258,8 +258,20 @@ class Database {
                     id: l.id,
                     scope: l.scope,
                     targetId: l.target_id,
-                    monthlyMax: l.monthly_max || 104
+                    monthlyMax: l.monthly_max || 104,
+                    restDeductionEnabled: l.rest_deduction_enabled !== undefined ? l.rest_deduction_enabled : undefined,
+                    restThresholdHours: l.rest_threshold_hours !== undefined ? Number(l.rest_threshold_hours) : undefined,
+                    restDeductHours: l.rest_deduct_hours !== undefined ? Number(l.rest_deduct_hours) : undefined
                 }));
+
+                const sbGlobal = mappedLimits.find(l => l.scope === 'global');
+                if (sbGlobal && sbGlobal.restThresholdHours !== undefined && !isNaN(sbGlobal.restThresholdHours)) {
+                    localStorage.setItem('clock_plus_rest_deduction_rule', JSON.stringify({
+                        enabled: sbGlobal.restDeductionEnabled !== false,
+                        thresholdHours: Number(sbGlobal.restThresholdHours) || 5,
+                        deductHours: Number(sbGlobal.restDeductHours) || 0.5
+                    }));
+                }
             }
 
             let mappedHierarchy = this.data.hierarchy || [];
@@ -303,6 +315,53 @@ class Database {
                 read: Boolean(n.read)
             }));
 
+            // Auto-generate notification for any pending requests awaiting approval
+            if (mappedRequests && mappedRequests.length > 0) {
+                const pending = mappedRequests.filter(r => r.status === 'Pending Approval');
+                for (const r of pending) {
+                    const reqUser = uniqueUsers.find(u => u.id === r.requesterId || u.email === r.requesterId);
+                    const reqName = reqUser ? reqUser.name : r.requesterId;
+                    const proj = this.getProject(r.project);
+                    const projName = proj ? proj.name : (r.project || 'Project');
+
+                    const approverIds = new Set();
+                    if (r.approverId) approverIds.add(r.approverId);
+                    
+                    const hierMap = (mappedHierarchy || []).find(h => h.workerId === r.requesterId);
+                    if (hierMap?.approverId) approverIds.add(hierMap.approverId);
+
+                    // If no explicit approver is set, notify company superiors and admins
+                    if (approverIds.size === 0) {
+                        const superiors = mappedCompanyUsers.filter(u => u.role === 'superior' || u.role === 'admin');
+                        superiors.forEach(s => approverIds.add(s.userId));
+                    }
+
+                    approverIds.forEach(appId => {
+                        const hasNotif = mappedNotifications.some(n => 
+                            (n.userId === appId || (n.userId && appId && (n.userId.startsWith(appId) || appId.startsWith(n.userId)))) && 
+                            n.message && n.message.includes(r.id)
+                        );
+                        if (!hasNotif) {
+                            const newNotif = {
+                                id: `NT-${Math.floor(100000 + Math.random() * 900000)}`,
+                                userId: appId,
+                                message: `Worker ${reqName} submitted a new OT request (${r.id}) for project ${projName}.`,
+                                timestamp: r.startDate || new Date().toISOString(),
+                                read: false
+                            };
+                            mappedNotifications.unshift(newNotif);
+                            supabase.from('notifications').upsert({
+                                id: newNotif.id,
+                                company_id: activeCompanyId || 'COMP-101',
+                                user_id: newNotif.userId,
+                                message: newNotif.message,
+                                timestamp: newNotif.timestamp
+                            }).then();
+                        }
+                    });
+                }
+            }
+
             // Sync with local cache
             this.data = {
                 ...this.data,
@@ -312,7 +371,7 @@ class Database {
                 limits: mappedLimits,
                 hierarchy: mappedHierarchy,
                 requests: mappedRequests.length > 0 ? mappedRequests : this.data.requests,
-                notifications: mappedNotifications.length > 0 ? mappedNotifications : this.data.notifications
+                notifications: mappedNotifications.length > 0 ? mappedNotifications : (this.data.notifications || [])
             };
 
             this.saveData(this.data);
@@ -503,28 +562,35 @@ class Database {
     }
 
     async getActiveSessionUser() {
-        const { data: { user: authUser }, error } = await supabase.auth.getUser();
-        if (error || !authUser) return null;
+        const localUser = this.getCurrentUser();
+        if (localUser) return localUser;
 
-        await this.syncFromSupabase();
+        try {
+            const { data: { user: authUser }, error } = await supabase.auth.getUser();
+            if (error || !authUser) return null;
 
-        const companyUsers = this.getData().company_users || [];
-        const match = companyUsers.find(cu => 
-            cu.userId === authUser.id || 
-            (cu.userId && (authUser.id.startsWith(cu.userId) || cu.userId.startsWith(authUser.id))) ||
-            (cu.email && cu.email.toLowerCase() === authUser.email.toLowerCase())
-        );
+            await this.syncFromSupabase();
 
-        if (!match) return null;
+            const companyUsers = this.getData().company_users || [];
+            const match = companyUsers.find(cu => 
+                cu.userId === authUser.id || 
+                (cu.userId && (authUser.id.startsWith(cu.userId) || cu.userId.startsWith(authUser.id))) ||
+                (cu.email && cu.email.toLowerCase() === authUser.email.toLowerCase())
+            );
 
-        const hasCustomName = match.name && match.name.trim() !== '' && match.name.toUpperCase() !== 'EMPTY' && match.name !== 'User';
-        return {
-            id: authUser.id,
-            name: hasCustomName ? match.name : (authUser.email || 'User'),
-            role: (match.role && match.role.toLowerCase() === 'admin') ? 'admin' : (match.role && match.role.toLowerCase() === 'superior' ? 'superior' : 'worker'),
-            position: match.position || 'Staff',
-            email: authUser.email
-        };
+            if (!match) return null;
+
+            const hasCustomName = match.name && match.name.trim() !== '' && match.name.toUpperCase() !== 'EMPTY' && match.name !== 'User';
+            return {
+                id: authUser.id,
+                name: hasCustomName ? match.name : (authUser.email || 'User'),
+                role: (match.role && match.role.toLowerCase() === 'admin') ? 'admin' : (match.role && match.role.toLowerCase() === 'superior' ? 'superior' : 'worker'),
+                position: match.position || 'Staff',
+                email: authUser.email
+            };
+        } catch (e) {
+            return null;
+        }
     }
 
     async createUser(user) {
@@ -899,6 +965,49 @@ class Database {
         return { monthlyMax: 104 };
     }
 
+    getRestDeductionRule() {
+        const limitsList = this.getLimits() || [];
+        const globalLimit = limitsList.find(l => l.scope === 'global') || {};
+        const savedRule = localStorage.getItem('clock_plus_rest_deduction_rule');
+        let localConfig = null;
+        if (savedRule) {
+            try { localConfig = JSON.parse(savedRule); } catch (e) {}
+        }
+
+        return {
+            enabled: localConfig ? localConfig.enabled : (globalLimit.restDeductionEnabled !== false),
+            thresholdHours: Number(localConfig?.thresholdHours ?? globalLimit.restThresholdHours ?? 5),
+            deductHours: Number(localConfig?.deductHours ?? globalLimit.restDeductHours ?? 0.5)
+        };
+    }
+
+    calculateNetOvertime(grossHours) {
+        const gross = Number(grossHours) || 0;
+        const rule = this.getRestDeductionRule();
+
+        if (!rule.enabled || rule.thresholdHours <= 0 || rule.deductHours <= 0 || gross < rule.thresholdHours) {
+            return {
+                grossHours: gross,
+                restDeducted: 0,
+                netHours: gross,
+                breakCount: 0,
+                ruleApplied: false
+            };
+        }
+
+        const breakCount = Math.floor(gross / rule.thresholdHours);
+        const restDeducted = Number((breakCount * rule.deductHours).toFixed(2));
+        const netHours = Math.max(0, Number((gross - restDeducted).toFixed(2)));
+
+        return {
+            grossHours: gross,
+            restDeducted,
+            netHours,
+            breakCount,
+            ruleApplied: true
+        };
+    }
+
     async saveLimit(limit) {
         const data = this.getData();
         const index = data.limits.findIndex(l => l.scope === limit.scope && l.targetId === limit.targetId);
@@ -909,6 +1018,14 @@ class Database {
         }
         this.saveData(data);
 
+        if (limit.scope === 'global') {
+            localStorage.setItem('clock_plus_rest_deduction_rule', JSON.stringify({
+                enabled: limit.restDeductionEnabled !== false,
+                thresholdHours: Number(limit.restThresholdHours) || 5,
+                deductHours: Number(limit.restDeductHours) || 0.5
+            }));
+        }
+
         try {
             const query = supabase.from('limits').delete().eq('scope', limit.scope);
             if (limit.targetId) {
@@ -917,12 +1034,30 @@ class Database {
                 await query.is('target_id', null);
             }
 
-            const { error: insErr } = await supabase.from('limits').insert({
+            const insertPayload = {
                 scope: limit.scope,
                 target_id: limit.targetId,
                 monthly_max: limit.monthlyMax || 104
-            });
-            if (insErr) console.error("Error inserting limit to Supabase:", insErr);
+            };
+            if (limit.scope === 'global') {
+                insertPayload.rest_deduction_enabled = limit.restDeductionEnabled !== false;
+                insertPayload.rest_threshold_hours = Number(limit.restThresholdHours) || 5;
+                insertPayload.rest_deduct_hours = Number(limit.restDeductHours) || 0.5;
+            }
+
+            const { error: insErr } = await supabase.from('limits').insert(insertPayload);
+            if (insErr) {
+                // If columns don't exist yet in Supabase schema, fallback gracefully
+                if (insErr.message && (insErr.message.includes('column') || insErr.code === '42703')) {
+                    await supabase.from('limits').insert({
+                        scope: limit.scope,
+                        target_id: limit.targetId,
+                        monthly_max: limit.monthlyMax || 104
+                    });
+                } else {
+                    console.error("Error inserting limit to Supabase:", insErr);
+                }
+            }
         } catch (e) {
             console.error("Exception saving limit to Supabase:", e);
         }
@@ -1119,11 +1254,27 @@ class Database {
                     );
                 });
             }
-        } else if (newRequest.status === 'Pending Approval' && newRequest.approverId) {
-            this.createNotification(
-                newRequest.approverId,
-                `Worker ${reqUser ? reqUser.name : newRequest.requesterId} submitted a new OT request (${newId}) for project ${projName}.`
-            );
+        } else if (newRequest.status === 'Pending Approval') {
+            const approverIds = new Set();
+            if (newRequest.approverId) approverIds.add(newRequest.approverId);
+
+            const approvers = this.getApproversForWorker(newRequest.requesterId);
+            if (approvers.level1) approverIds.add(approvers.level1);
+            if (approvers.level2) approverIds.add(approvers.level2);
+            if (approvers.level3) approverIds.add(approvers.level3);
+
+            // If no explicit approver is assigned, notify company superiors and admins
+            if (approverIds.size === 0) {
+                const superiors = this.getUsers().filter(u => (u.role === 'superior' || u.role === 'admin') && u.id !== newRequest.requesterId);
+                superiors.forEach(s => approverIds.add(s.id));
+            }
+
+            approverIds.forEach(targetId => {
+                this.createNotification(
+                    targetId,
+                    `Worker ${reqUser ? reqUser.name : newRequest.requesterId} submitted a new OT request (${newId}) for project ${projName}.`
+                );
+            });
         } else if (newRequest.status === 'Pending Worker Consent' && newRequest.requesterId) {
             this.createNotification(
                 newRequest.requesterId,
@@ -1257,9 +1408,29 @@ class Database {
         }
     }
 
+    _isUserMatch(notifUserId, targetUserId) {
+        if (!notifUserId || !targetUserId) return false;
+        const nId = String(notifUserId).toLowerCase().trim();
+        const tId = String(targetUserId).toLowerCase().trim();
+        if (nId === tId) return true;
+
+        const u = this.getUser(targetUserId);
+        if (u) {
+            const uId = u.id ? String(u.id).toLowerCase().trim() : '';
+            const uEmail = u.email ? String(u.email).toLowerCase().trim() : '';
+            if (uId && nId === uId) return true;
+            if (uEmail && nId === uEmail) return true;
+            if (uId && uId.length > 5 && (nId.startsWith(uId) || uId.startsWith(nId))) return true;
+        }
+
+        if (tId.length > 5 && (nId.startsWith(tId) || tId.startsWith(nId))) return true;
+        return false;
+    }
+
     getNotifications(userId) {
         this.cleanupExpiredNotifications();
-        return (this.getData().notifications || []).filter(n => n.userId === userId);
+        if (!userId) return [];
+        return (this.getData().notifications || []).filter(n => this._isUserMatch(n.userId, userId));
     }
 
     getUnreadNotificationsCount(userId) {
@@ -1310,19 +1481,23 @@ class Database {
     clearAllNotifications(userId) {
         const data = this.getData();
         if (!data.notifications) return;
-        data.notifications = data.notifications.filter(n => n.userId !== userId);
+        data.notifications = data.notifications.filter(n => !this._isUserMatch(n.userId, userId));
         this.saveData(data);
 
-        supabase.from('notifications').delete().eq('user_id', userId).then(({ error }) => {
-            if (error) console.error("Error clearing notifications from Supabase:", error);
-        });
+        const u = this.getUser(userId);
+        const idsToClear = [userId, u?.id, u?.email].filter(Boolean);
+        for (const uid of idsToClear) {
+            supabase.from('notifications').delete().eq('user_id', uid).then(({ error }) => {
+                if (error) console.error("Error clearing notifications from Supabase:", error);
+            });
+        }
     }
 
     markNotificationsAsRead(userId) {
         const data = this.getData();
         if (data.notifications) {
             data.notifications.forEach(n => {
-                if (n.userId === userId) n.read = true;
+                if (this._isUserMatch(n.userId, userId)) n.read = true;
             });
             this.saveData(data);
         }

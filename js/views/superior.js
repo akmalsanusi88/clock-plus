@@ -1,6 +1,6 @@
 // Clock+ Superior/Approver View Controller
 import { db } from '../db.js';
-import { showToast, formatDateTime, icons } from './shared.js';
+import { showToast, showRequestDecisionModal, formatDateTime, icons } from './shared.js';
 
 export function renderSuperiorView(container, superiorId) {
     const subordinates = db.getSubordinatesForSuperior(superiorId);
@@ -446,9 +446,12 @@ export function renderSuperiorView(container, superiorId) {
         document.querySelectorAll('.approve-btn').forEach(btn => {
             btn.onclick = () => {
                 const reqId = btn.dataset.id;
-                db.updateRequest(reqId, { status: 'Approved' }, superiorId, 'Approved request');
+                const req = db.getRequest(reqId);
+                const updated = db.updateRequest(reqId, { status: 'Approved' }, superiorId, 'Approved request');
                 showToast(`Request ${reqId} approved successfully.`, 'success');
-                refreshAll();
+                showRequestDecisionModal(updated || req, 'Approved', () => {
+                    refreshAll();
+                });
             };
         });
 
