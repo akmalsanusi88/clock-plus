@@ -48,6 +48,62 @@ export function renderSuperiorView(container, superiorId) {
         "July", "August", "September", "October", "November", "December"
     ];
 
+    const myAllRequests = teamRequests.filter(r => 
+        r.requesterId === superiorId || (r.teamMembers && r.teamMembers.includes(superiorId))
+    );
+    const myActiveApproved = myAllRequests.filter(r => r.status === 'Approved');
+
+    let activeApprovedHtml = '';
+    if (myActiveApproved.length > 0) {
+        activeApprovedHtml = `
+            <!-- Active Overtime (Awaiting Work Completion & Closeout) -->
+            <div class="card glass-panel" style="margin-bottom: 20px; border-left: 4px solid var(--primary); background: #f0fdf4;">
+                <div class="card-header" style="margin-bottom: 12px;">
+                    <div>
+                        <h2 class="card-title" style="font-size: 1.05rem; color: #166534;">
+                            ${icons.check} My Active Overtime Shifts (Awaiting Closeout)
+                        </h2>
+                        <p style="font-size: 0.8rem; color: #15803d; margin-top: 2px;">
+                            These shifts are approved. When work is finished, submit actual hours to finalize into official records.
+                        </p>
+                    </div>
+                    <span class="badge badge-approved" style="font-size: 0.74rem;">${myActiveApproved.length} Active</span>
+                </div>
+
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${myActiveApproved.map(r => {
+                        const proj = db.getProject(r.project);
+                        const pName = proj ? proj.name : (r.project || 'Project');
+                        return `
+                            <div class="mobile-shift-card" style="margin-bottom: 0; background: #ffffff; border: 1px solid #bbf7d0; padding: 12px 14px;">
+                                <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 8px;">
+                                    <div>
+                                        <div style="display: flex; align-items: center; gap: 8px;">
+                                            <strong style="color: var(--primary); font-size: 0.95rem;">${pName}</strong>
+                                            <span class="badge badge-approved" style="font-size: 0.68rem;">${r.id}</span>
+                                        </div>
+                                        <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">
+                                            Schedule: <strong>${formatDateTime(r.startDate || r.dateStart)}</strong> &rarr; <strong>${formatDateTime(r.endDate || r.dateEnd)}</strong>
+                                        </div>
+                                    </div>
+                                    <div style="display: flex; align-items: center; gap: 10px;">
+                                        <div style="text-align: right;">
+                                            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Scheduled</div>
+                                            <div style="font-weight: 800; font-size: 1.05rem; color: var(--primary);">${Number(r.duration || 0).toFixed(1)}h</div>
+                                        </div>
+                                        <button class="btn btn-success btn-sm btn-sup-close-ot" data-id="${r.id}" style="padding: 6px 14px; font-weight: 700; font-size: 0.78rem;">
+                                            Close OT &amp; Submit Actuals
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            </div>
+        `;
+    }
+
     container.innerHTML = `
         <!-- KPI Summary Cards -->
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 16px; margin-bottom: 24px;">
@@ -91,6 +147,8 @@ export function renderSuperiorView(container, superiorId) {
                 <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">Direct subordinates</div>
             </div>
         </div>
+
+        ${activeApprovedHtml}
 
         <!-- Pending Approvals Queue -->
         <div class="card glass-panel" style="margin-bottom: 24px;">
@@ -179,6 +237,58 @@ export function renderSuperiorView(container, superiorId) {
                     </tbody>
                 </table>
             </div>
+        </div>
+
+        <!-- My Personal Overtime Sessions & Requests -->
+        <div class="card glass-panel" style="margin-top: 20px; margin-bottom: 0;">
+            <div class="card-header" style="margin-bottom: 12px;">
+                <div>
+                    <h2 class="card-title">${icons.assignment} My Personal Overtime Sessions &amp; Requests</h2>
+                    <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                        Overtime shifts requested by you or where you are participating.
+                    </p>
+                </div>
+                <span class="badge badge-info">${myAllRequests.length} Total</span>
+            </div>
+            ${myAllRequests.length === 0 ? `
+                <div class="empty-state" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                    ${icons.info}
+                    <div style="margin-top: 8px; font-weight: 500; font-size: 0.86rem;">You have not submitted or been assigned to any overtime sessions yet.</div>
+                </div>
+            ` : `
+                <div style="display: flex; flex-direction: column; gap: 8px;">
+                    ${myAllRequests.map(r => {
+                        const proj = db.getProject(r.project);
+                        const pName = proj ? proj.name : (r.project || 'General');
+                        let stBadge = `<span class="badge badge-pending">Pending</span>`;
+                        if (r.status === 'Completed') stBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+                        else if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                        else if (r.status === 'Rejected') stBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
+
+                        const isReqUser = r.requesterId === superiorId;
+                        const canClose = r.status === 'Approved' && isReqUser;
+                        const durationDisplay = r.status === 'Completed' && r.actualDuration != null
+                            ? `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`
+                            : `${Number(r.duration || 0).toFixed(1)} hrs`;
+                        
+                        return `
+                            <div class="mobile-shift-card sup-personal-shift-row" data-id="${r.id}" style="margin-bottom: 0; padding: 10px 12px; cursor: pointer;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <strong style="color: var(--primary); font-size: 0.88rem;">${r.id} &bull; ${pName}</strong>
+                                    <div style="display: flex; align-items: center; gap: 6px;">
+                                        ${canClose ? `<button type="button" class="btn btn-success btn-sm btn-sup-personal-close-ot" data-id="${r.id}" style="padding: 2px 8px; font-size: 0.72rem; font-weight: 700;">Close OT</button>` : ''}
+                                        ${stBadge}
+                                    </div>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted);">
+                                    <span>${formatDateTime(r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart))}</span>
+                                    <strong style="color: var(--text-main); font-size: 0.84rem;">${durationDisplay}</strong>
+                                </div>
+                            </div>
+                        `;
+                    }).join('')}
+                </div>
+            `}
         </div>
     `;
 
@@ -512,4 +622,24 @@ export function renderSuperiorView(container, superiorId) {
 
     loadPendingQueue();
     loadSubordinates();
+
+    container.querySelectorAll('.btn-sup-close-ot, .btn-sup-personal-close-ot').forEach(btn => {
+        btn.onclick = (e) => {
+            e.stopPropagation();
+            const reqId = btn.dataset.id;
+            if (reqId && window.openCloseOTModal) {
+                window.openCloseOTModal(reqId, () => renderSuperiorView(container, superiorId));
+            }
+        };
+    });
+
+    container.querySelectorAll('.sup-personal-shift-row').forEach(card => {
+        card.onclick = (e) => {
+            if (e.target.closest('.btn-sup-personal-close-ot')) return;
+            const reqId = card.dataset.id;
+            if (reqId && window.openRequestReviewModal) {
+                window.openRequestReviewModal(reqId);
+            }
+        };
+    });
 }
