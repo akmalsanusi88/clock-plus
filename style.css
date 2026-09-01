@@ -1556,10 +1556,51 @@ strong svg,
         padding: 0 16px !important;
         height: 58px !important;
         background: #ffffff !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        width: 100% !important;
     }
 
+    /* Hide top Menu button on mobile screens (the bottom navigation bar serves as the mobile menu) */
+    #nav-bubble-toggle,
+    #nav-bubble-popover,
     .menu-toggle {
         display: none !important;
+    }
+
+    /* Compact Header User Pill on mobile: keep avatar, hide long name text to leave room for Notifications */
+    .header-user-pill {
+        padding: 0 !important;
+        background: transparent !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    .header-user-info {
+        display: none !important;
+    }
+
+    .header-avatar {
+        width: 34px !important;
+        height: 34px !important;
+        font-size: 0.84rem !important;
+    }
+
+    /* Notification Bell styling for mobile */
+    .notification-bell-container {
+        width: 38px !important;
+        height: 38px !important;
+    }
+
+    /* Mobile Notification Popover positioning */
+    .notif-bubble-popover {
+        position: fixed !important;
+        top: 62px !important;
+        right: 12px !important;
+        left: 12px !important;
+        width: auto !important;
+        max-width: calc(100vw - 24px) !important;
     }
 
     .dev-panel label {
