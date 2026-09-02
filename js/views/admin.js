@@ -238,13 +238,17 @@ export function renderAdminDashboard(container) {
                         let stBadge = `<span class="badge badge-pending">Pending</span>`;
                         if (r.status === 'Completed') stBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
                         else if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                        else if (r.status === 'Cancelled') stBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
                         else if (r.status === 'Rejected') stBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
 
                         const isReqUser = r.requesterId === currentUserId || (currentEmail && r.requesterId === currentEmail);
                         const canClose = r.status === 'Approved' && (isReqUser || isAdmin);
-                        const durationDisplay = r.status === 'Completed' && r.actualDuration != null
-                            ? `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`
-                            : `${Number(r.duration || 0).toFixed(1)} hrs`;
+                        let durationDisplay = `${Number(r.duration || 0).toFixed(1)} hrs`;
+                        if (r.status === 'Completed' && r.actualDuration != null) {
+                            durationDisplay = `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`;
+                        } else if (r.status === 'Cancelled') {
+                            durationDisplay = `<span style="color:#dc2626;">0.0 hrs</span> <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(cancelled)</span>`;
+                        }
                         
                         return `
                             <div class="mobile-shift-card" style="margin-bottom: 0; padding: 10px 12px;">
@@ -924,6 +928,7 @@ export function renderAdminReport(container) {
                             <option value="">All Statuses</option>
                             <option value="Completed">Completed (Closed)</option>
                             <option value="Approved">Approved (Active)</option>
+                            <option value="Cancelled">Cancelled (0.0h)</option>
                             <option value="Pending Approval">Pending Approval</option>
                             <option value="Pending Worker Consent">Pending Consent</option>
                             <option value="Rejected">Rejected</option>
@@ -1278,13 +1283,14 @@ export function renderAdminReport(container) {
                 let statusBadge = '';
                 if (r.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
                 else if (r.status === 'Approved') statusBadge = `<span class="badge badge-pending" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Approved (Active)</span>`;
+                else if (r.status === 'Cancelled') statusBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
                 else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
                 else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
                 else statusBadge = `<span class="badge badge-pending">Pending</span>`;
 
                 const startDisplay = formatDateTime(r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart));
                 const endDisplay = formatDateTime(r.status === 'Completed' && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd || r.startDate));
-                const durVal = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                const durVal = r.status === 'Cancelled' ? 0 : (r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0));
 
                 return `
                     <tr class="rep-main-row" data-id="${r.id}" style="cursor: pointer;">
@@ -1303,7 +1309,7 @@ export function renderAdminReport(container) {
                         <td style="font-size: 0.78rem; color: var(--text-main); white-space: nowrap;">${endDisplay}</td>
                         <td style="font-weight: 700; color: var(--primary); font-size: 0.84rem;">
                             ${durVal.toFixed(1)} hrs
-                            ${r.status === 'Completed' ? `<span style="font-size:0.68rem; color:var(--text-muted); font-weight:normal; display:block;">(actual)</span>` : ''}
+                            ${r.status === 'Completed' ? `<span style="font-size:0.68rem; color:var(--text-muted); font-weight:normal; display:block;">(actual)</span>` : (r.status === 'Cancelled' ? `<span style="font-size:0.68rem; color:#dc2626; font-weight:normal; display:block;">(cancelled)</span>` : '')}
                         </td>
                         <td>${statusBadge}</td>
                         <td style="text-align: right; white-space: nowrap;">
@@ -1345,6 +1351,20 @@ export function renderAdminReport(container) {
                                             ${r.closingRemarks ? `
                                                 <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #a7f3d0; color: #065f46;">
                                                     <strong>Closing Remarks:</strong> "${r.closingRemarks}"
+                                                </div>
+                                            ` : ''}
+                                        </div>
+                                    ` : ''}
+
+                                    ${r.status === 'Cancelled' ? `
+                                        <div style="margin-top: 10px; padding: 8px 12px; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 8px; font-size: 0.78rem;">
+                                            <div style="font-weight: 700; color: #991b1b; margin-bottom: 2px;">Overtime Cancelled (Work Did Not Proceed):</div>
+                                            <div style="color: #7f1d1d;">
+                                                Recorded Claimable OT: <strong>0.0 hrs</strong>
+                                            </div>
+                                            ${r.closingRemarks ? `
+                                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #fca5a5; color: #991b1b;">
+                                                    <strong>Cancellation Remarks:</strong> "${r.closingRemarks}"
                                                 </div>
                                             ` : ''}
                                         </div>
@@ -1506,17 +1526,18 @@ export function renderAdminReport(container) {
                                             const pObj = db.getProject(ws.project);
                                             const pName = pObj ? pObj.name : (ws.project || 'Project');
                                             const isDone = ws.status === 'Completed';
+                                            const isCancelled = ws.status === 'Cancelled';
                                             const sObj = new Date(isDone && ws.actualStartDate ? ws.actualStartDate : (ws.startDate || ws.dateStart));
                                             const eObj = new Date(isDone && ws.actualEndDate ? ws.actualEndDate : (ws.endDate || ws.dateEnd || ws.startDate));
                                             const dateOnly = formatDateOnly(isDone && ws.actualStartDate ? ws.actualStartDate : (ws.startDate || ws.dateStart));
                                             const sTime = !isNaN(sObj.getTime()) ? sObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : (ws.actualTimeStart || ws.timeStart || '-');
                                             const eTime = !isNaN(eObj.getTime()) ? eObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : (ws.actualTimeEnd || ws.timeEnd || '-');
                                             
-                                            const grossH = Number(isDone && ws.actualGrossDuration != null ? ws.actualGrossDuration : (ws.grossDuration || ws.duration || 0));
-                                            const restH = Number(isDone && ws.actualRestDeduction != null ? ws.actualRestDeduction : (ws.restDeduction || 0));
-                                            const netH = Number(isDone && ws.actualDuration != null ? ws.actualDuration : (ws.duration || 0));
+                                            const grossH = isCancelled ? 0 : Number(isDone && ws.actualGrossDuration != null ? ws.actualGrossDuration : (ws.grossDuration || ws.duration || 0));
+                                            const restH = isCancelled ? 0 : Number(isDone && ws.actualRestDeduction != null ? ws.actualRestDeduction : (ws.restDeduction || 0));
+                                            const netH = isCancelled ? 0 : Number(isDone && ws.actualDuration != null ? ws.actualDuration : (ws.duration || 0));
 
-                                            let st = isDone ? '✅ Completed' : (ws.status === 'Approved' ? '⚡ Active' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending'));
+                                            let st = isDone ? '✅ Completed' : (ws.status === 'Approved' ? '⚡ Active' : (ws.status === 'Cancelled' ? '⛔ Cancelled' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending')));
                                             return `
                                                 <tr>
                                                     <td style="padding: 5px 8px; font-weight: 600;">${dateOnly}</td>
@@ -1525,7 +1546,7 @@ export function renderAdminReport(container) {
                                                     <td style="padding: 5px 8px;">${pName}</td>
                                                     <td style="padding: 5px 8px; color: var(--text-muted);">${grossH.toFixed(1)}h</td>
                                                     <td style="padding: 5px 8px;">-${restH.toFixed(1)}h</td>
-                                                    <td style="padding: 5px 8px; font-weight: 700; color: var(--primary);">${netH.toFixed(1)}h</td>
+                                                    <td style="padding: 5px 8px; font-weight: 700; color: ${isCancelled ? '#dc2626' : 'var(--primary)'};">${netH.toFixed(1)}h</td>
                                                     <td style="padding: 5px 8px;">${st}</td>
                                                 </tr>
                                             `;
@@ -1576,11 +1597,12 @@ export function renderAdminReport(container) {
         const data = currentFiltered.map(r => {
             const requester = db.getUser(r.requesterId);
             const isDone = r.status === 'Completed';
+            const isCancelled = r.status === 'Cancelled';
             const sDate = isDone && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart);
             const eDate = isDone && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd || r.startDate);
-            const gross = Number(isDone && r.actualGrossDuration != null ? r.actualGrossDuration : (r.grossDuration || r.duration || 0));
-            const rest = Number(isDone && r.actualRestDeduction != null ? r.actualRestDeduction : (r.restDeduction || 0));
-            const net = Number(isDone && r.actualDuration != null ? r.actualDuration : (r.duration || 0));
+            const gross = isCancelled ? 0 : Number(isDone && r.actualGrossDuration != null ? r.actualGrossDuration : (r.grossDuration || r.duration || 0));
+            const rest = isCancelled ? 0 : Number(isDone && r.actualRestDeduction != null ? r.actualRestDeduction : (r.restDeduction || 0));
+            const net = isCancelled ? 0 : Number(isDone && r.actualDuration != null ? r.actualDuration : (r.duration || 0));
 
             return {
                 "OT ID": r.id,
@@ -1592,7 +1614,7 @@ export function renderAdminReport(container) {
                 "Rest Deduction": rest,
                 "Net Claimable OT Hours": net,
                 "Status": r.status,
-                "Closing Remarks": r.closingRemarks || ''
+                "Closing / Cancellation Remarks": r.closingRemarks || ''
             };
         });
         if (window.XLSX) {
@@ -1613,7 +1635,10 @@ export function renderAdminReport(container) {
             doc.autoTable({
                 startY: 60,
                 head: [['ID', 'Requestor', 'Project', 'Start', 'End', 'Net Hours', 'Status']],
-                body: currentFiltered.map(r => [r.id, db.getUser(r.requesterId)?.name || r.requesterId, r.project, formatDateOnly(r.startDate), formatDateOnly(r.endDate), r.duration.toFixed(1), r.status])
+                body: currentFiltered.map(r => {
+                    const dur = r.status === 'Cancelled' ? '0.0' : (r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration).toFixed(1) : Number(r.duration || 0).toFixed(1));
+                    return [r.id, db.getUser(r.requesterId)?.name || r.requesterId, r.project, formatDateOnly(r.startDate), formatDateOnly(r.endDate), dur, r.status];
+                })
             });
             doc.save(`Report_${new Date().getTime()}.pdf`);
         } else {

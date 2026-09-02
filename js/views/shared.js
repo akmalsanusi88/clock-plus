@@ -332,6 +332,71 @@ export function showCloseOTConfirmationModal(req, onDone) {
     };
 }
 
+// Pop-up Confirmation Dialog for Cancelled Overtime Session (0.0h)
+export function showCancelOTConfirmationModal(req, onDone) {
+    let modal = document.getElementById('ot-cancelled-confirm-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'ot-cancelled-confirm-modal';
+        modal.className = 'modal-overlay';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-box glass-panel" style="max-width: 480px; text-align: center; padding: 30px 24px; animation: modalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+            <div style="width: 64px; height: 64px; border-radius: 50%; background: #fff1f2; border: 2px solid #ef4444; color: #ef4444; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; box-shadow: 0 6px 18px rgba(239, 68, 68, 0.2);">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:34px;height:34px;stroke-width:2.5;">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </div>
+
+            <h2 style="font-size: 1.35rem; font-weight: 800; color: var(--text-main); margin-bottom: 6px;">
+                Overtime Shift Cancelled
+            </h2>
+            <p style="font-size: 0.86rem; color: var(--text-muted); margin-bottom: 20px;">
+                Shift <strong>${req.id}</strong> has been cancelled and logged into official records as <strong>0.0 hrs</strong>.
+            </p>
+
+            <div style="background: #ffffff; border: 1.5px solid var(--border-color); border-radius: 12px; padding: 16px; text-align: left; margin-bottom: 22px; box-shadow: 0 2px 8px rgba(0,0,0,0.03);">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; border-bottom: 1px dashed var(--border-color); padding-bottom: 10px;">
+                    <div>
+                        <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; font-weight: 700; display: block;">Request ID</span>
+                        <span style="font-weight: 800; font-size: 1.05rem; color: var(--primary);">${req.id}</span>
+                    </div>
+                    <div><span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span></div>
+                </div>
+
+                <div style="display: flex; justify-content: space-between; align-items: center; background: #fef2f2; padding: 8px 12px; border-radius: 8px; font-size: 0.84rem; margin-bottom: 10px;">
+                    <span style="color: #991b1b; font-weight: 600;">Recorded Claimable OT:</span>
+                    <strong style="color: #991b1b; font-size: 1.1rem;">0.0 hrs</strong>
+                </div>
+
+                <div style="font-size: 0.82rem; color: var(--text-main); border-top: 1px solid var(--border-color); padding-top: 8px;">
+                    <strong style="color: #b91c1c;">Cancellation Remarks:</strong>
+                    <div style="margin-top: 4px; color: var(--text-muted); font-style: italic;">"${req.closingRemarks || req.cancellationReason || 'Work did not proceed.'}"</div>
+                </div>
+            </div>
+
+            <button type="button" class="btn btn-primary" id="btn-cancel-ot-confirm-ok" style="width: 100%; padding: 10px; font-size: 0.95rem; font-weight: 700;">
+                Done &amp; View Records
+            </button>
+        </div>
+    `;
+
+    modal.classList.add('active');
+
+    const btnOk = document.getElementById('btn-cancel-ot-confirm-ok');
+    const dismiss = () => {
+        modal.classList.remove('active');
+        if (onDone) onDone();
+    };
+
+    btnOk.onclick = dismiss;
+    modal.onclick = (e) => {
+        if (e.target === modal) dismiss();
+    };
+}
+
 // Modal for Requester to Close an Approved Overtime Shift
 export function openCloseOTModal(requestId, onDone) {
     if (typeof window === 'undefined' || !window.db) return;
@@ -441,9 +506,35 @@ export function openCloseOTModal(requestId, onDone) {
                     <textarea id="close-actual-remarks" placeholder="Summarize deliverables completed, handover status, or any reasons if actual hours differed from schedule..." style="min-height: 70px; padding: 8px 10px; font-size: 0.82rem; width: 100%; border-radius: 8px; border: 1px solid var(--border-color);"></textarea>
                 </div>
 
-                <div style="display: flex; justify-content: flex-end; gap: 10px;">
-                    <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-close-ot" style="padding: 6px 14px;">Cancel</button>
-                    <button type="submit" class="btn btn-success btn-sm" id="btn-submit-close-ot" style="padding: 6px 18px; font-weight: 700;">Confirm & Close Overtime</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+                    <button type="button" class="btn btn-sm" id="btn-trigger-cancel-ot" style="background: #fff1f2; color: #dc2626; border: 1.5px solid #fca5a5; font-weight: 700; padding: 6px 12px; display: inline-flex; align-items: center; gap: 5px;">
+                        ${icons.times} Cancel OT (Did Not Proceed)
+                    </button>
+                    <div style="display: flex; gap: 10px;">
+                        <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-close-ot" style="padding: 6px 14px;">Dismiss</button>
+                        <button type="submit" class="btn btn-success btn-sm" id="btn-submit-close-ot" style="padding: 6px 18px; font-weight: 700;">Confirm &amp; Close Overtime</button>
+                    </div>
+                </div>
+
+                <!-- Hidden Cancellation Accordion Panel -->
+                <div id="cancel-ot-panel" style="display: none; margin-top: 14px; padding: 14px; background: #fff1f2; border: 1.5px solid #fecdd3; border-radius: 10px; animation: modalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);">
+                    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px; color: #991b1b;">
+                        <span style="font-size: 1.1rem;">⚠️</span>
+                        <strong style="font-size: 0.95rem;">Cancel Overtime Shift (Work Did Not Proceed)</strong>
+                    </div>
+                    <p style="font-size: 0.8rem; color: #7f1d1d; margin-bottom: 10px;">
+                        This will cancel shift <strong>${req.id}</strong> and record <strong>0.0 hrs</strong> into the official records. Your cancellation remarks will be logged for your superior.
+                    </p>
+                    <div class="form-group" style="margin-bottom: 12px;">
+                        <label for="cancel-ot-reason" style="font-size: 0.78rem; font-weight: 700; color: #991b1b; display: block; margin-bottom: 4px;">
+                            Reason for Cancellation *
+                        </label>
+                        <textarea id="cancel-ot-reason" placeholder="e.g. Work cancelled / Postponed by supervisor / Client rescheduled / Did not proceed..." style="min-height: 60px; padding: 8px 10px; font-size: 0.82rem; width: 100%; border-radius: 6px; border: 1.5px solid #fca5a5; background: #ffffff !important; color: #0f172a !important;"></textarea>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                        <button type="button" class="btn btn-secondary btn-sm" id="btn-back-from-cancel" style="padding: 5px 12px; font-size: 0.78rem;">Back</button>
+                        <button type="button" class="btn btn-danger btn-sm" id="btn-confirm-cancel-ot" style="padding: 5px 16px; font-size: 0.78rem; font-weight: 700; background: #dc2626;">Confirm Cancel (0.0 hrs)</button>
+                    </div>
                 </div>
             </form>
         </div>
@@ -460,6 +551,11 @@ export function openCloseOTModal(requestId, onDone) {
     const form = document.getElementById('close-ot-form');
     const btnCancel = document.getElementById('btn-cancel-close-ot');
     const btnX = document.getElementById('btn-close-ot-modal-x');
+    const triggerCancelBtn = document.getElementById('btn-trigger-cancel-ot');
+    const cancelPanel = document.getElementById('cancel-ot-panel');
+    const cancelReasonIn = document.getElementById('cancel-ot-reason');
+    const btnBackFromCancel = document.getElementById('btn-back-from-cancel');
+    const btnConfirmCancel = document.getElementById('btn-confirm-cancel-ot');
 
     const parseCombinedDateTime = (dStr, tStr) => {
         if (!dStr || !tStr) return null;
@@ -548,6 +644,37 @@ export function openCloseOTModal(requestId, onDone) {
     modal.onclick = (e) => {
         if (e.target === modal) closeModal();
     };
+
+    if (triggerCancelBtn && cancelPanel) {
+        triggerCancelBtn.onclick = () => {
+            cancelPanel.style.display = 'block';
+            cancelReasonIn.focus();
+            triggerCancelBtn.style.display = 'none';
+        };
+    }
+
+    if (btnBackFromCancel && cancelPanel) {
+        btnBackFromCancel.onclick = () => {
+            cancelPanel.style.display = 'none';
+            triggerCancelBtn.style.display = 'inline-flex';
+        };
+    }
+
+    if (btnConfirmCancel) {
+        btnConfirmCancel.onclick = () => {
+            const reason = (cancelReasonIn.value || remarksIn.value).trim();
+            if (!reason) {
+                showToast("Please provide a reason for cancelling this overtime shift.", "error");
+                cancelReasonIn.focus();
+                return;
+            }
+
+            const cancelledReq = db.cancelOvertimeRequest(requestId, { cancellationRemarks: reason });
+            closeModal();
+            showToast(`Overtime shift ${requestId} cancelled (0.0h recorded).`, "info");
+            showCancelOTConfirmationModal(cancelledReq, onDone);
+        };
+    }
 
     form.onsubmit = (e) => {
         e.preventDefault();

@@ -263,13 +263,17 @@ export function renderSuperiorView(container, superiorId) {
                         let stBadge = `<span class="badge badge-pending">Pending</span>`;
                         if (r.status === 'Completed') stBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
                         else if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+                        else if (r.status === 'Cancelled') stBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
                         else if (r.status === 'Rejected') stBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
 
                         const isReqUser = r.requesterId === superiorId;
                         const canClose = r.status === 'Approved' && isReqUser;
-                        const durationDisplay = r.status === 'Completed' && r.actualDuration != null
-                            ? `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`
-                            : `${Number(r.duration || 0).toFixed(1)} hrs`;
+                        let durationDisplay = `${Number(r.duration || 0).toFixed(1)} hrs`;
+                        if (r.status === 'Completed' && r.actualDuration != null) {
+                            durationDisplay = `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`;
+                        } else if (r.status === 'Cancelled') {
+                            durationDisplay = `<span style="color:#dc2626;">0.0 hrs</span> <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(cancelled)</span>`;
+                        }
                         
                         return `
                             <div class="mobile-shift-card sup-personal-shift-row" data-id="${r.id}" style="margin-bottom: 0; padding: 10px 12px; cursor: pointer;">

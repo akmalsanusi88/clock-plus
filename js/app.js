@@ -2,7 +2,7 @@ import { db } from './db.js';
 import { renderAdminView, renderAdminRequest, renderAdminReport } from './views/admin.js';
 import { renderWorkerView } from './views/worker.js';
 import { renderSuperiorView } from './views/superior.js';
-import { showToast, showRequestDecisionModal, openCloseOTModal, formatDateTime, icons } from './views/shared.js';
+import { showToast, showRequestDecisionModal, openCloseOTModal, showCancelOTConfirmationModal, formatDateTime, icons } from './views/shared.js';
 
 // Application State
 const state = {
@@ -16,6 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.db = db;
     window.openRequestReviewModal = openRequestReviewModal;
     window.openCloseOTModal = openCloseOTModal;
+    window.showCancelOTConfirmationModal = showCancelOTConfirmationModal;
     initNotificationSystem();
     initResponsiveNav();
     initLoginScreen(); // Bind submit event immediately on page load
@@ -735,6 +736,25 @@ export function openRequestReviewModal(requestId) {
             <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 12px 14px; font-size: 0.88rem; color: #dc2626;">
                 <strong>${icons.times} Rejection Reason:</strong>
                 <div style="margin-top: 4px;">${req.rejectionReason}</div>
+            </div>
+        `;
+    }
+
+    if (req.status === 'Cancelled') {
+        contentHtml += `
+            <div style="background: #fff1f2; border: 1.5px solid #fecdd3; border-radius: 10px; padding: 14px; font-size: 0.88rem; color: #991b1b;">
+                <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
+                    ${icons.times} Overtime Shift Cancelled (Work Did Not Proceed)
+                </div>
+                <div style="background: #ffffff; border: 1px solid #fecdd3; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <span style="font-weight: 600;">Recorded Claimable Overtime:</span>
+                    <span style="font-weight: 800; font-size: 1.1rem; color: #dc2626;">0.0 hrs</span>
+                </div>
+                ${req.closingRemarks || req.cancellationReason ? `
+                    <div style="margin-top: 6px; font-size: 0.82rem;">
+                        <strong>Cancellation Reason / Remarks:</strong> "${req.closingRemarks || req.cancellationReason}"
+                    </div>
+                ` : ''}
             </div>
         `;
     }

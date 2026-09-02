@@ -1472,6 +1472,77 @@ class Database {
         return newRequest;
     }
 
+    cancelOvertimeRequest(id, cancelData = {}, actionUserId) {
+        const data = this.getData();
+        const index = data.requests.findIndex(r => r.id === id);
+        if (index === -1) throw new Error(`Request ${id} not found.`);
+
+        const req = data.requests[index];
+        const user = this.getCurrentUser();
+        const actorId = actionUserId || (user ? user.id : req.requesterId);
+        const actorName = user ? user.name : 'Requester';
+        const remarks = (cancelData.cancellationRemarks || cancelData.closingRemarks || '').trim() || 'Work did not proceed.';
+
+        const updatedFields = {
+            status: 'Cancelled',
+            actualDuration: 0,
+            actualGrossDuration: 0,
+            actualRestDeduction: 0,
+            closingRemarks: remarks,
+            cancellationReason: remarks,
+            closedAt: new Date().toISOString(),
+            closedBy: actorId
+        };
+
+        const newRequest = { ...req, ...updatedFields };
+        newRequest.history = newRequest.history || [];
+        newRequest.history.push({
+            timestamp: new Date().toISOString(),
+            userId: actorId,
+            action: `Cancelled Overtime (0.0h recorded). Reason: "${remarks}"`
+        });
+
+        data.requests[index] = newRequest;
+        this.saveData(data);
+
+        // Notify Approvers / Superiors
+        const approverIds = new Set();
+        if (req.approverId) approverIds.add(req.approverId);
+        const hierApprovers = this.getApproversForWorker(req.requesterId);
+        if (hierApprovers.level1) approverIds.add(hierApprovers.level1);
+        if (hierApprovers.level2) approverIds.add(hierApprovers.level2);
+        if (hierApprovers.level3) approverIds.add(hierApprovers.level3);
+
+        const projName = this.getProject(newRequest.project)?.name || newRequest.project;
+        approverIds.forEach(targetId => {
+            if (targetId !== actorId) {
+                this.createNotification(
+                    targetId,
+                    `${actorName} cancelled Overtime shift (${id}) on ${projName} (0.0h). Reason: "${remarks}"`
+                );
+            }
+        });
+
+        // Sync to Supabase
+        const sbPayload = {
+            status: 'Cancelled',
+            actual_duration: 0,
+            actual_gross_duration: 0,
+            actual_rest_deduction: 0,
+            closing_remarks: remarks,
+            closed_at: updatedFields.closedAt,
+            closed_by: updatedFields.closedBy
+        };
+
+        supabase.from('overtime_requests').update(sbPayload).eq('id', id).then(({ error }) => {
+            if (error) {
+                supabase.from('overtime_requests').update({ status: 'Cancelled' }).eq('id', id).catch(e => {});
+            }
+        });
+
+        return newRequest;
+    }
+
     // --- Notifications ---
     cleanupExpiredNotifications() {
         const data = this.getData();

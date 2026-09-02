@@ -207,6 +207,7 @@ export function renderWorkerView(container, workerId) {
                     <option value="">All Statuses</option>
                     <option value="Completed">Completed (Closed)</option>
                     <option value="Approved">Approved (In Progress)</option>
+                    <option value="Cancelled">Cancelled (0.0h)</option>
                     <option value="Pending Approval">Pending Approval</option>
                     <option value="Pending Worker Consent">Pending Consent</option>
                     <option value="Rejected">Rejected</option>
@@ -462,6 +463,7 @@ export function renderWorkerView(container, workerId) {
             let statusBadge = '';
             if (r.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
             else if (r.status === 'Approved') statusBadge = `<span class="badge badge-pending" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Approved (Active)</span>`;
+            else if (r.status === 'Cancelled') statusBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
             else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
             else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
             else statusBadge = `<span class="badge badge-pending">Pending</span>`;
@@ -471,9 +473,12 @@ export function renderWorkerView(container, workerId) {
 
             const sDate = r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart);
             const eDate = r.status === 'Completed' && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd);
-            const durationDisplay = r.status === 'Completed' && r.actualDuration != null 
-                ? `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`
-                : `${Number(r.duration).toFixed(1)} hrs`;
+            let durationDisplay = `${Number(r.duration).toFixed(1)} hrs`;
+            if (r.status === 'Completed' && r.actualDuration != null) {
+                durationDisplay = `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`;
+            } else if (r.status === 'Cancelled') {
+                durationDisplay = `<span style="color:#dc2626;">0.0 hrs</span> <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(cancelled)</span>`;
+            }
 
             const isRequester = r.requesterId === workerId;
             const canClose = r.status === 'Approved' && isRequester;
