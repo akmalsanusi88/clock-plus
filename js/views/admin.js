@@ -541,10 +541,7 @@ export function renderAdminRequest(container) {
                         </div>
 
                         <div class="form-group" style="margin-bottom: 0;">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
-                                <label for="admin-req-time-start" style="font-weight: 600; margin-bottom: 0;">Proposed Start Time</label>
-                                <span id="start-time-preset-badge" style="font-size: 0.70rem; font-weight: 600; color: var(--primary); background: rgba(99, 102, 241, 0.08); padding: 1px 6px; border-radius: 4px;">Preset</span>
-                            </div>
+                            <label for="admin-req-time-start" style="font-weight: 600;">Proposed Start Time</label>
                             <input type="time" id="admin-req-time-start" required style="background:#ffffff !important; color:#0f172a !important;">
                         </div>
 
@@ -646,16 +643,10 @@ export function renderAdminRequest(container) {
         }
     };
 
-    const startTimeBadge = document.getElementById('start-time-preset-badge');
-
     const applyPresetsForDate = (dateStr) => {
         const preset = getPresetTimesForDate(dateStr);
         timeStartInput.value = preset.start;
         timeEndInput.value = preset.end;
-        if (startTimeBadge) {
-            startTimeBadge.textContent = `Preset: ${preset.label}`;
-            startTimeBadge.style.color = "var(--primary)";
-        }
     };
 
     // Default Dates and Times
@@ -798,21 +789,10 @@ export function renderAdminRequest(container) {
     };
 
     dateEndInput.onchange = checkCompliance;
-    timeStartInput.oninput = () => {
-        const preset = getPresetTimesForDate(dateStartInput.value);
-        if (startTimeBadge) {
-            if (timeStartInput.value === preset.start) {
-                startTimeBadge.textContent = `Preset: ${preset.label}`;
-                startTimeBadge.style.color = "var(--primary)";
-            } else {
-                startTimeBadge.textContent = `Custom (${preset.start} preset)`;
-                startTimeBadge.style.color = "var(--text-muted)";
-            }
-        }
-        checkCompliance();
-    };
     timeStartInput.onchange = checkCompliance;
+    timeStartInput.oninput = checkCompliance;
     timeEndInput.onchange = checkCompliance;
+    timeEndInput.oninput = checkCompliance;
     workerCheckboxes.forEach(cb => cb.onchange = checkCompliance);
     checkCompliance();
 
