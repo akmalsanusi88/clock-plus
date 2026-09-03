@@ -541,7 +541,10 @@ export function renderAdminRequest(container) {
                         </div>
 
                         <div class="form-group" style="margin-bottom: 0;">
-                            <label for="admin-req-time-start" style="font-weight: 600;">Proposed Start Time</label>
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                                <label for="admin-req-time-start" style="font-weight: 600; margin-bottom: 0;">Proposed Start Time</label>
+                                <span id="start-time-preset-badge" style="font-size: 0.70rem; font-weight: 600; color: var(--primary); background: rgba(99, 102, 241, 0.08); padding: 1px 6px; border-radius: 4px;">Preset</span>
+                            </div>
                             <input type="time" id="admin-req-time-start" required style="background:#ffffff !important; color:#0f172a !important;">
                         </div>
 
@@ -624,22 +627,60 @@ export function renderAdminRequest(container) {
     const submitBtn = document.getElementById('btn-admin-submit-ot');
     const searchInput = document.getElementById('admin-search-workers');
 
+    // Helper: Preset start & end times based on day of week:
+    // - Monday-Friday: 5.00pm (17:00)
+    // - Saturday: 2.00pm (14:00)
+    // - Sunday: 8.00am (08:00)
+    const getPresetTimesForDate = (dateStr) => {
+        if (!dateStr) return { start: "17:00", end: "19:00", label: "5:00 PM (Mon–Fri)" };
+        const parts = dateStr.split('-').map(Number);
+        const dateObj = new Date(parts[0], parts[1] - 1, parts[2]);
+        const dow = dateObj.getDay(); // 0 = Sun, 6 = Sat
+
+        if (dow === 0) {
+            return { start: "08:00", end: "10:00", label: "8:00 AM (Sun)" };
+        } else if (dow === 6) {
+            return { start: "14:00", end: "16:00", label: "2:00 PM (Sat)" };
+        } else {
+            return { start: "17:00", end: "19:00", label: "5:00 PM (Mon–Fri)" };
+        }
+    };
+
+    const startTimeBadge = document.getElementById('start-time-preset-badge');
+
+    const applyPresetsForDate = (dateStr) => {
+        const preset = getPresetTimesForDate(dateStr);
+        timeStartInput.value = preset.start;
+        timeEndInput.value = preset.end;
+        if (startTimeBadge) {
+            startTimeBadge.textContent = `Preset: ${preset.label}`;
+            startTimeBadge.style.color = "var(--primary)";
+        }
+    };
+
     // Default Dates and Times
     const today = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const todayStr = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`;
     dateStartInput.value = todayStr;
     dateEndInput.value = todayStr;
-    timeStartInput.value = "18:00";
-    timeEndInput.value = "20:00";
+    applyPresetsForDate(todayStr);
 
-    // Auto synchronize end date if start date changes
-    dateStartInput.onchange = () => {
+    // Auto synchronize end date & update presets if start date changes
+    const handleDateStartChange = () => {
         if (!dateEndInput.value || dateEndInput.value <= dateStartInput.value) {
             dateEndInput.value = dateStartInput.value;
         }
+        applyPresetsForDate(dateStartInput.value);
         checkCompliance();
     };
+
+    dateStartInput.onchange = handleDateStartChange;
+    dateStartInput.addEventListener('input', () => {
+        if (dateStartInput.value && dateStartInput.value.length === 10) {
+            handleDateStartChange();
+        }
+    });
 
     // Ensure at least one worker is checked if none was preset
     const workerCheckboxes = document.querySelectorAll('.admin-worker-checkbox');
@@ -757,6 +798,19 @@ export function renderAdminRequest(container) {
     };
 
     dateEndInput.onchange = checkCompliance;
+    timeStartInput.oninput = () => {
+        const preset = getPresetTimesForDate(dateStartInput.value);
+        if (startTimeBadge) {
+            if (timeStartInput.value === preset.start) {
+                startTimeBadge.textContent = `Preset: ${preset.label}`;
+                startTimeBadge.style.color = "var(--primary)";
+            } else {
+                startTimeBadge.textContent = `Custom (${preset.start} preset)`;
+                startTimeBadge.style.color = "var(--text-muted)";
+            }
+        }
+        checkCompliance();
+    };
     timeStartInput.onchange = checkCompliance;
     timeEndInput.onchange = checkCompliance;
     workerCheckboxes.forEach(cb => cb.onchange = checkCompliance);
@@ -843,11 +897,10 @@ export function renderAdminRequest(container) {
 
         form.reset();
 
-        // Reset default dates
+        // Reset default dates and preset times
         dateStartInput.value = todayStr;
         dateEndInput.value = todayStr;
-        timeStartInput.value = "18:00";
-        timeEndInput.value = "20:00";
+        applyPresetsForDate(todayStr);
         if (workerCheckboxes.length > 0) workerCheckboxes[0].checked = true;
         checkCompliance();
     };
