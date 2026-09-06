@@ -2025,6 +2025,7 @@ export function renderAdminSettings(container) {
                         <thead>
                             <tr>
                                 <th>User</th>
+                                <th>Email</th>
                                 <th>Role</th>
                                 <th>Position</th>
                                 <th>Allowed Pages</th>
@@ -2196,15 +2197,13 @@ export function renderAdminSettings(container) {
             const allowedPages = db.getUserAllowedPages(u.id);
             const pageTags = allowedPages.map(p => `<span class="badge" style="background: rgba(99,102,241,0.08); color: var(--primary); text-transform: capitalize; margin-right: 4px;">${p}</span>`).join('');
             
-            const hasCustomName = u.name && u.name !== u.email && u.name !== 'User';
-            const userCellContent = hasCustomName 
-                ? `<div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${u.name}</div>
-                   <div style="font-size: 0.76rem; color: var(--text-muted);">${u.email}</div>`
-                : `<div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${u.email || u.name}</div>`;
+            const displayName = (u.name && u.name !== u.email && u.name !== 'User') ? u.name : (u.email || u.name || 'User');
+            const emailDisplay = u.email || '-';
 
             return `
                 <tr class="clickable-user-row" data-id="${u.id}" style="cursor: pointer; transition: background 0.15s ease;">
-                    <td>${userCellContent}</td>
+                    <td><div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${displayName}</div></td>
+                    <td><div style="font-size: 0.85rem; color: var(--text-muted);">${emailDisplay}</div></td>
                     <td><span class="badge" style="text-transform: capitalize;">${u.role}</span></td>
                     <td>${u.position || 'Staff'}</td>
                     <td>${pageTags}</td>
