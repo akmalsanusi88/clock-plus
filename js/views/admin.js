@@ -2681,7 +2681,7 @@ export function renderAdminSettings(container) {
 
             const buildOptions = (selectedId) => eligibleSuperiors.map(s => `
                 <option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>
-                    ${s.name || s.email} (${s.position || s.role})
+                    ${s.name || s.email}
                 </option>
             `).join('');
 
@@ -2710,7 +2710,6 @@ export function renderAdminSettings(container) {
                             <div style="font-weight: 600; color: var(--text-main); font-size: 0.82rem;">${w.name || w.email}</div>
                             <span class="badge" style="font-size: 0.65rem; padding: 1px 5px; border-radius: 3px; text-transform: capitalize; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;">${w.role}</span>
                         </div>
-                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">${w.position || 'Staff'}</div>
                     </td>
                     <td>
                         <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="1" style="width: 100%; font-size: 0.76rem; padding: 4px 8px; height: 30px; border-radius: 6px; background: #ffffff !important; color: #0f172a !important;">
