@@ -2142,7 +2142,7 @@ export function renderAdminSettings(container) {
 
                 <!-- Users Table -->
                 <div class="table-container">
-                    <table>
+                    <table class="table-compact">
                         <thead>
                             <tr>
                                 <th>User</th>
@@ -2174,7 +2174,7 @@ export function renderAdminSettings(container) {
                 </div>
 
                 <div class="table-container">
-                    <table>
+                    <table class="table-compact">
                         <thead>
                             <tr>
                                 <th>Worker / Employee</th>
@@ -2480,23 +2480,23 @@ export function renderAdminSettings(container) {
         const users = db.getUsers();
         usersList.innerHTML = users.map(u => {
             const allowedPages = db.getUserAllowedPages(u.id);
-            const pageTags = allowedPages.map(p => `<span class="badge" style="background: rgba(99,102,241,0.08); color: var(--primary); text-transform: capitalize; margin-right: 4px;">${p}</span>`).join('');
+            const pageTags = allowedPages.map(p => `<span class="badge" style="background: rgba(99,102,241,0.08); color: var(--primary); text-transform: capitalize; font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; margin: 1px 2px;">${p}</span>`).join('');
             
             const displayName = (u.name && u.name !== u.email && u.name !== 'User') ? u.name : (u.email || u.name || 'User');
             const emailDisplay = u.email || '-';
             const scopeVal = u.data_scope || u.dataScope || db.getUserDataScope(u.id);
-            const scopeBadge = scopeVal === 'global' ? `<span class="badge" style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; font-size:0.72rem;">Global</span>` :
-                (scopeVal === 'team' ? `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.72rem;">Team</span>` :
-                `<span class="badge" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; font-size:0.72rem;">Personal</span>`);
+            const scopeBadge = scopeVal === 'global' ? `<span class="badge" style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; font-size:0.68rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Global</span>` :
+                (scopeVal === 'team' ? `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.68rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Team</span>` :
+                `<span class="badge" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; font-size:0.68rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Personal</span>`);
 
             return `
                 <tr class="clickable-user-row" data-id="${u.id}" style="cursor: pointer; transition: background 0.15s ease;">
-                    <td><div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${displayName}</div></td>
-                    <td><div style="font-size: 0.85rem; color: var(--text-muted);">${emailDisplay}</div></td>
+                    <td><div style="font-weight: 600; color: var(--text-main); font-size: 0.82rem; letter-spacing: -0.01em;">${displayName}</div></td>
+                    <td><div style="font-size: 0.76rem; color: var(--text-muted);">${emailDisplay}</div></td>
                     <td>${renderRoleBadge(u.role)}</td>
                     <td>${scopeBadge}</td>
-                    <td>${u.position || 'Staff'}</td>
-                    <td>${pageTags}</td>
+                    <td><span style="font-size: 0.78rem; color: var(--text-main);">${u.position || 'Staff'}</span></td>
+                    <td><div style="display: flex; flex-wrap: wrap; gap: 2px;">${pageTags}</div></td>
                 </tr>
             `;
         }).join('');
@@ -2689,49 +2689,49 @@ export function renderAdminSettings(container) {
             const routeBadges = [];
             if (approvers.level1) {
                 const s1 = db.getUser(approvers.level1);
-                routeBadges.push(`<span class="badge" style="background: rgba(99,102,241,0.1); color: var(--primary);">L1: ${s1?.name || s1?.email || 'Approver'}</span>`);
+                routeBadges.push(`<span class="badge" style="background: rgba(99,102,241,0.08); color: var(--primary); font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">L1: ${s1?.name || s1?.email || 'Approver'}</span>`);
             }
             if (approvers.level2) {
                 const s2 = db.getUser(approvers.level2);
-                routeBadges.push(`<span class="badge" style="background: rgba(16,185,129,0.1); color: var(--success);">L2: ${s2?.name || s2?.email || 'Approver'}</span>`);
+                routeBadges.push(`<span class="badge" style="background: rgba(16,185,129,0.08); color: var(--success); font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">L2: ${s2?.name || s2?.email || 'Approver'}</span>`);
             }
             if (approvers.level3) {
                 const s3 = db.getUser(approvers.level3);
-                routeBadges.push(`<span class="badge" style="background: rgba(245,158,11,0.1); color: var(--warning);">L3: ${s3?.name || s3?.email || 'Approver'}</span>`);
+                routeBadges.push(`<span class="badge" style="background: rgba(245,158,11,0.08); color: var(--warning); font-size: 0.68rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">L3: ${s3?.name || s3?.email || 'Approver'}</span>`);
             }
             const routeDisplay = routeBadges.length > 0 
-                ? routeBadges.join('<span style="color: var(--text-muted); font-size: 0.8rem; margin: 0 4px;">&rarr;</span>')
-                : '<span style="color: var(--text-muted); font-size: 0.82rem;">No approvers set</span>';
+                ? routeBadges.join('<span style="color: var(--text-muted); font-size: 0.68rem; margin: 0 3px;">&rarr;</span>')
+                : '<span style="color: var(--text-muted); font-size: 0.74rem;">No approvers set</span>';
 
             return `
                 <tr>
                     <td>
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <div style="font-weight: 700; color: var(--text-main);">${w.name || w.email}</div>
-                            <span class="badge" style="font-size: 0.7rem; text-transform: capitalize;">${w.role}</span>
+                        <div style="display: flex; align-items: center; gap: 6px;">
+                            <div style="font-weight: 600; color: var(--text-main); font-size: 0.82rem;">${w.name || w.email}</div>
+                            <span class="badge" style="font-size: 0.65rem; padding: 1px 5px; border-radius: 3px; text-transform: capitalize; background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;">${w.role}</span>
                         </div>
-                        <div style="font-size: 0.76rem; color: var(--text-muted);">${w.position || 'Staff'}</div>
+                        <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 1px;">${w.position || 'Staff'}</div>
                     </td>
                     <td>
-                        <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="1" style="width: 100%; font-size: 0.85rem; padding: 6px 10px;">
+                        <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="1" style="width: 100%; font-size: 0.76rem; padding: 4px 8px; height: 30px; border-radius: 6px; background: #ffffff !important; color: #0f172a !important;">
                             <option value="">-- No L1 Approver --</option>
                             ${buildOptions(approvers.level1)}
                         </select>
                     </td>
                     <td>
-                        <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="2" style="width: 100%; font-size: 0.85rem; padding: 6px 10px;">
+                        <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="2" style="width: 100%; font-size: 0.76rem; padding: 4px 8px; height: 30px; border-radius: 6px; background: #ffffff !important; color: #0f172a !important;">
                             <option value="">-- No L2 Approver (Optional) --</option>
                             ${buildOptions(approvers.level2)}
                         </select>
                     </td>
                     <td>
-                        <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="3" style="width: 100%; font-size: 0.85rem; padding: 6px 10px;">
+                        <select class="hierarchy-select filter-input" data-worker="${w.id}" data-level="3" style="width: 100%; font-size: 0.76rem; padding: 4px 8px; height: 30px; border-radius: 6px; background: #ffffff !important; color: #0f172a !important;">
                             <option value="">-- No L3 Approver (Optional) --</option>
                             ${buildOptions(approvers.level3)}
                         </select>
                     </td>
                     <td>
-                        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 4px;">
+                        <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 3px;">
                             ${routeDisplay}
                         </div>
                     </td>

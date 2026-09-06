@@ -818,18 +818,18 @@ export const icons = {
 export function renderRoleBadge(role) {
     const r = (role || 'worker').toLowerCase().trim();
     if (r === 'superadmin' || r === 'super_admin' || r === 'owner') {
-        return `<span class="badge" style="background: rgba(147, 51, 234, 0.12); color: #7e22ce; border: 1px solid rgba(147, 51, 234, 0.3); font-weight: 700;">Super Admin</span>`;
+        return `<span class="badge" style="background: rgba(147, 51, 234, 0.12); color: #7e22ce; border: 1px solid rgba(147, 51, 234, 0.3); font-weight: 600; font-size: 0.70rem; padding: 2px 7px; border-radius: 4px;">Super Admin</span>`;
     }
     if (r === 'admin') {
-        return `<span class="badge" style="background: rgba(79, 70, 229, 0.12); color: #4338ca; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 700;">Admin</span>`;
+        return `<span class="badge" style="background: rgba(79, 70, 229, 0.12); color: #4338ca; border: 1px solid rgba(79, 70, 229, 0.3); font-weight: 600; font-size: 0.70rem; padding: 2px 7px; border-radius: 4px;">Admin</span>`;
     }
     if (r === 'superior' || r === 'manager') {
-        return `<span class="badge" style="background: rgba(2, 132, 199, 0.12); color: #0369a1; border: 1px solid rgba(2, 132, 199, 0.3); font-weight: 700;">Manager / Approver</span>`;
+        return `<span class="badge" style="background: rgba(2, 132, 199, 0.12); color: #0369a1; border: 1px solid rgba(2, 132, 199, 0.3); font-weight: 600; font-size: 0.70rem; padding: 2px 7px; border-radius: 4px;">Manager / Approver</span>`;
     }
     if (r === 'supervisor' || r === 'coordinator') {
-        return `<span class="badge" style="background: rgba(217, 119, 6, 0.12); color: #b45309; border: 1px solid rgba(217, 119, 6, 0.3); font-weight: 700;">Supervisor</span>`;
+        return `<span class="badge" style="background: rgba(217, 119, 6, 0.12); color: #b45309; border: 1px solid rgba(217, 119, 6, 0.3); font-weight: 600; font-size: 0.70rem; padding: 2px 7px; border-radius: 4px;">Supervisor</span>`;
     }
-    return `<span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600;">Worker</span>`;
+    return `<span class="badge" style="background: rgba(16, 185, 129, 0.12); color: #047857; border: 1px solid rgba(16, 185, 129, 0.3); font-weight: 600; font-size: 0.70rem; padding: 2px 7px; border-radius: 4px;">Worker</span>`;
 }
 
 export function formatRoleName(role) {
