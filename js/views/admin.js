@@ -914,10 +914,22 @@ export function renderAdminRequest(container) {
 export function renderAdminReport(container) {
     const users = db.getUsers();
     const allRequests = db.getRequests();
+    const currentUser = db.getCurrentUser();
+    const currentRole = (currentUser?.role || 'worker').toLowerCase().trim();
+    const isGlobalAdmin = currentRole === 'superadmin' || currentRole === 'admin';
+    const isManager = currentRole === 'superior' || currentRole === 'manager';
+    const isRestrictedToSelf = !isGlobalAdmin && !isManager; // supervisor or worker
 
-    let selectedEmployeeId = '';
+    let selectedEmployeeId = isRestrictedToSelf ? (currentUser?.id || '') : '';
     let selectedProjectId = '';
     let activeReportTab = 'details';
+
+    let initialEmpLabel = 'All Employees';
+    if (isRestrictedToSelf) {
+        initialEmpLabel = `My Records (${currentUser?.name || 'Self'})`;
+    } else if (isManager) {
+        initialEmpLabel = 'All Team (Managers & Below)';
+    }
 
     const now = new Date();
     const curYear = now.getFullYear();
@@ -952,9 +964,9 @@ export function renderAdminReport(container) {
                     <div class="filter-group" style="margin-bottom: 0;">
                         <label style="font-size: 0.76rem; font-weight: 600; color: var(--text-muted); margin-bottom: 3px; display: block;">Employee:</label>
                         <div class="searchable-select-container" id="rep-employee-container">
-                            <button type="button" class="searchable-select-trigger" id="rep-employee-trigger" style="height: 34px; padding: 0 10px; font-size: 0.8rem;">
-                                <span id="rep-employee-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 150px;">All Employees</span>
-                                <span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 6px;">▼</span>
+                            <button type="button" class="searchable-select-trigger" id="rep-employee-trigger" style="height: 34px; padding: 0 10px; font-size: 0.8rem; ${isRestrictedToSelf ? 'cursor: default; background: #f1f5f9;' : ''}">
+                                <span id="rep-employee-label" style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 170px;">${initialEmpLabel}</span>
+                                ${isRestrictedToSelf ? '' : `<span style="font-size: 0.65rem; color: var(--text-muted); margin-left: 6px;">▼</span>`}
                             </button>
                             <div class="searchable-select-popover" id="rep-employee-popover">
                                 <input type="text" class="searchable-select-search" id="rep-employee-search" placeholder="Search employee...">
@@ -1137,12 +1149,26 @@ export function renderAdminReport(container) {
     });
 
     const renderEmployeeOptions = (searchTerm = '') => {
+        if (isRestrictedToSelf) {
+            empOptionsContainer.innerHTML = '';
+            return;
+        }
+
         const term = searchTerm.toLowerCase().trim();
         const currentUsers = db.getUsers();
-        const currentUser = db.getCurrentUser();
-        const accessibleWorkerIds = currentUser ? db.getAccessibleWorkerIds(currentUser.id) : [];
-        const isGlobal = currentUser && (currentUser.role === 'superadmin' || currentUser.role === 'admin' || db.getUserDataScope(currentUser.id) === 'global');
-        const availableUsers = isGlobal ? currentUsers : currentUsers.filter(u => accessibleWorkerIds.includes(u.id));
+
+        let availableUsers = [];
+        let defaultLabel = 'All Employees';
+
+        if (isGlobalAdmin) {
+            // Admin & Super Admin can view all workers
+            availableUsers = currentUsers;
+            defaultLabel = 'All Employees';
+        } else if (isManager) {
+            // Manager can view their own level and below (superior, supervisor, worker)
+            availableUsers = currentUsers.filter(u => u.role !== 'admin' && u.role !== 'superadmin');
+            defaultLabel = 'All Team (Managers & Below)';
+        }
 
         const filteredUsers = availableUsers.filter(u => 
             !term || u.name.toLowerCase().includes(term) || (u.email && u.email.toLowerCase().includes(term))
@@ -1150,7 +1176,7 @@ export function renderAdminReport(container) {
 
         let html = `
             <div class="searchable-select-option ${selectedEmployeeId === '' ? 'selected' : ''}" data-value="">
-                ${isGlobal ? 'All Employees' : 'My Accessible Team'}
+                ${defaultLabel}
             </div>
         `;
 
@@ -1158,7 +1184,7 @@ export function renderAdminReport(container) {
             html += `
                 <div class="searchable-select-option ${selectedEmployeeId === u.id ? 'selected' : ''}" data-value="${u.id}">
                     <div style="font-weight: 600;">${u.name}</div>
-                    <div style="font-size: 0.72rem; color: var(--text-muted);">${u.position || 'Staff'}</div>
+                    <div style="font-size: 0.72rem; color: var(--text-muted);">${u.position || u.role}</div>
                 </div>
             `;
         });
@@ -1170,7 +1196,7 @@ export function renderAdminReport(container) {
                 e.stopPropagation();
                 selectedEmployeeId = opt.dataset.value;
                 if (!selectedEmployeeId) {
-                    empLabel.innerText = isGlobal ? 'All Employees' : 'My Accessible Team';
+                    empLabel.innerText = defaultLabel;
                 } else {
                     const u = db.getUser(selectedEmployeeId);
                     empLabel.innerText = u ? u.name : selectedEmployeeId;
@@ -1183,6 +1209,10 @@ export function renderAdminReport(container) {
     };
 
     empTrigger.onclick = (e) => {
+        if (isRestrictedToSelf) {
+            // Supervisors and workers can only view their own records
+            return;
+        }
         e.stopPropagation();
         const isActive = empPopover.classList.contains('active');
         projPopover.classList.remove('active');
@@ -1269,18 +1299,42 @@ export function renderAdminReport(container) {
         const status = filterStatus.value;
         const fromDateStr = filterDateFrom.value;
         const toDateStr = filterDateTo.value;
-
         const allReqs = db.getRequests();
-        const currentUser = db.getCurrentUser();
-        const accessibleWorkerIds = currentUser ? db.getAccessibleWorkerIds(currentUser.id) : [];
-        const isGlobal = currentUser && (currentUser.role === 'superadmin' || currentUser.role === 'admin' || db.getUserDataScope(currentUser.id) === 'global');
+        const currentUsers = db.getUsers();
+
+        let accessibleWorkerIds = [];
+        if (isGlobalAdmin) {
+            // Admin & Super Admin: all workers across entire company
+            accessibleWorkerIds = currentUsers.map(u => u.id);
+        } else if (isManager) {
+            // Manager: their own level and below (manager, supervisor, worker)
+            accessibleWorkerIds = currentUsers.filter(u => u.role !== 'admin' && u.role !== 'superadmin').map(u => u.id);
+        } else {
+            // Supervisor & Worker: strictly their own records only
+            accessibleWorkerIds = currentUser ? [currentUser.id] : [];
+        }
 
         currentFiltered = allReqs.filter(r => {
-            // Data Scope Filter: non-global users only see requests in their accessible workforce
-            if (!isGlobal) {
+            // 1. Role-based Scope Filtering:
+            if (isRestrictedToSelf) {
+                // Supervisor or Worker: strictly view their own records only
+                const isMyRecord = currentUser && (
+                    r.requesterId === currentUser.id || 
+                    (r.teamMembers && r.teamMembers.includes(currentUser.id))
+                );
+                if (!isMyRecord) return false;
+            } else if (isManager) {
+                // Manager: can view their own level and below (superior, supervisor, worker)
+                // Exclude shifts requested by admin or superadmin unless the manager participated
+                const reqUser = db.getUser(r.requesterId);
+                const isAboveLevel = reqUser && (reqUser.role === 'admin' || reqUser.role === 'superadmin');
+                if (isAboveLevel) {
+                    const isManagerParticipating = currentUser && r.teamMembers && r.teamMembers.includes(currentUser.id);
+                    if (!isManagerParticipating) return false;
+                }
                 const reqParticipating = [r.requesterId, ...(r.teamMembers || [])];
-                const hasAccess = reqParticipating.some(id => accessibleWorkerIds.includes(id));
-                if (!hasAccess) return false;
+                const hasAccessibleUser = reqParticipating.some(id => accessibleWorkerIds.includes(id));
+                if (!hasAccessibleUser) return false;
             }
 
             const projectObj = db.getProject(r.project);
@@ -1648,9 +1702,9 @@ export function renderAdminReport(container) {
     filterDateFrom.onchange = loadReport;
     filterDateTo.onchange = loadReport;
     btnResetFilters.onclick = () => {
-        selectedEmployeeId = '';
+        selectedEmployeeId = isRestrictedToSelf ? (currentUser?.id || '') : '';
         selectedProjectId = '';
-        empLabel.innerText = 'All Employees';
+        empLabel.innerText = initialEmpLabel;
         projLabel.innerText = 'All Projects';
         filterStatus.value = '';
         filterDateFrom.value = '';
