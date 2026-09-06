@@ -1775,6 +1775,9 @@ export function renderAdminSettings(container) {
     const currentUser = db.getCurrentUser();
     const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
     const isSuperAdmin = currentUser && currentUser.role === 'superadmin';
+    const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+    const currentCompany = db.getCompany(activeCompanyId) || (db.getCompanies()[0]) || { id: activeCompanyId || 'default', name: 'Current Company' };
+    const currentCompanyName = currentCompany.name || 'Current Company';
 
     if (!isAdmin && currentUser) {
         const displayName = (currentUser.name && currentUser.name !== currentUser.email && currentUser.name !== 'User') ? currentUser.name : '';
@@ -2070,7 +2073,7 @@ export function renderAdminSettings(container) {
                     ${icons.limits} Compliance Hour Thresholds
                 </button>
                 <button type="button" class="settings-tab-btn" data-tab="tab-email-settings">
-                    ${icons.email} Client Email Settings
+                    ${icons.email} Company Email Settings
                 </button>
             ` : ''}
         </div>
@@ -2265,27 +2268,28 @@ export function renderAdminSettings(container) {
         </div>
 
         ${isSuperAdmin ? `
-        <!-- TAB 4: Client Email Settings (Super Admin Only) -->
+        <!-- TAB 4: Company Email Settings (Super Admin Only) -->
         <div id="tab-email-settings" class="settings-tab-pane" style="display: none;">
             <div class="card glass-panel" style="max-width: 780px;">
                 <div class="card-header" style="margin-bottom: 14px;">
                     <div>
-                        <h2 class="card-title">${icons.email} Client Email Notification Settings</h2>
+                        <h2 class="card-title">${icons.email} Company Email Notification Settings</h2>
                         <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
-                            Configure customized email notifications and server credentials for each client company.
+                            Configure customized email notifications and mail server credentials for <strong>${currentCompanyName}</strong>.
                         </p>
                     </div>
                 </div>
 
-                <!-- Client Selector Bar -->
-                <div style="background: rgba(99, 102, 241, 0.05); border: 1.5px solid rgba(99, 102, 241, 0.18); border-radius: 12px; padding: 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
-                    <div style="flex: 1; min-width: 240px;">
-                        <label for="email-client-select" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 6px;">
-                            Select Client Company
-                        </label>
-                        <select id="email-client-select" style="width: 100%; background: #ffffff !important; color: #0f172a !important; font-weight: 600; padding: 10px 14px; border-radius: 8px; border: 1.5px solid var(--border-color);">
-                            <!-- Populated with companies -->
-                        </select>
+                <!-- Current Company Info Banner -->
+                <div style="background: rgba(99, 102, 241, 0.05); border: 1.5px solid rgba(99, 102, 241, 0.18); border-radius: 12px; padding: 14px 18px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <div style="width: 44px; height: 44px; border-radius: 10px; background: #ffffff; border: 1.5px solid var(--border-color); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                            ${currentCompany.icon || '🏢'}
+                        </div>
+                        <div>
+                            <div style="font-size: 0.72rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Current Company</div>
+                            <div style="font-size: 1.12rem; font-weight: 800; color: var(--text-main); line-height: 1.2;">${currentCompanyName}</div>
+                        </div>
                     </div>
                     <div id="email-client-status-badge" style="display: flex; align-items: center;">
                         <!-- Status Badge -->
@@ -2298,7 +2302,7 @@ export function renderAdminSettings(container) {
                         <div>
                             <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">Enable Email Notifications</div>
                             <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
-                                Turn email alerts ON or OFF for this specific client company.
+                                Turn email alerts ON or OFF for ${currentCompanyName}.
                             </div>
                         </div>
                         <label style="position: relative; display: inline-block; width: 46px; height: 24px; margin: 0; cursor: pointer;">
@@ -2418,7 +2422,7 @@ export function renderAdminSettings(container) {
                             ${icons.email} Send Test Email
                         </button>
                         <button type="submit" class="btn btn-primary btn-sm" id="btn-save-client-email" style="padding: 9px 24px; font-weight: 600;">
-                            Save Client Email Settings
+                            Save Email Settings
                         </button>
                     </div>
                 </form>
@@ -2822,9 +2826,8 @@ export function renderAdminSettings(container) {
         showToast("Compliance threshold and rest deduction rule saved successfully.", "success");
     };
 
-    // --- Super Admin Client Email Settings Controller ---
+    // --- Super Admin Company Email Settings Controller ---
     if (isSuperAdmin) {
-        const emailClientSelect = document.getElementById('email-client-select');
         const emailClientStatusBadge = document.getElementById('email-client-status-badge');
         const emailForm = document.getElementById('settings-client-email-form');
         const emailIsEnabled = document.getElementById('email-is-enabled');
@@ -2858,15 +2861,13 @@ export function renderAdminSettings(container) {
             }
         };
 
-        const loadClientEmailSettings = (companyId) => {
-            if (!companyId) return;
-            const settings = db.getCompanyEmailSettings(companyId);
-            const comp = db.getCompany(companyId);
-            const companyName = comp ? comp.name : 'Company';
+        const loadCompanyEmailSettings = () => {
+            const targetCoId = currentCompany.id;
+            const settings = db.getCompanyEmailSettings(targetCoId);
 
             if (settings) {
                 if (emailIsEnabled) emailIsEnabled.checked = Boolean(settings.is_enabled);
-                if (emailSenderName) emailSenderName.value = settings.sender_name || `${companyName} Overtime Alerts`;
+                if (emailSenderName) emailSenderName.value = settings.sender_name || `${currentCompanyName} Overtime Alerts`;
                 if (emailSenderEmail) emailSenderEmail.value = settings.sender_email || '';
                 
                 const isApi = settings.provider_type === 'api_key';
@@ -2888,7 +2889,7 @@ export function renderAdminSettings(container) {
                 if (emailHrCc) emailHrCc.value = settings.hr_cc_email || '';
             } else {
                 if (emailIsEnabled) emailIsEnabled.checked = false;
-                if (emailSenderName) emailSenderName.value = `${companyName} Overtime Alerts`;
+                if (emailSenderName) emailSenderName.value = `${currentCompanyName} Overtime Alerts`;
                 if (emailSenderEmail) emailSenderEmail.value = '';
                 if (emailProviderSmtp) emailProviderSmtp.checked = true;
                 if (emailSmtpSection) emailSmtpSection.style.display = 'block';
@@ -2920,41 +2921,11 @@ export function renderAdminSettings(container) {
             };
         }
 
-        const populateClientCompanies = () => {
-            if (!emailClientSelect) return;
-            const companies = db.getCompanies();
-            const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
-
-            emailClientSelect.innerHTML = companies.map(c => `
-                <option value="${c.id}" ${c.id === activeCompanyId ? 'selected' : ''}>
-                    ${c.name} (${c.id})
-                </option>
-            `).join('');
-
-            if (companies.length > 0) {
-                const targetId = emailClientSelect.value || companies[0].id;
-                loadClientEmailSettings(targetId);
-            }
-        };
-
-        if (emailClientSelect) {
-            emailClientSelect.onchange = () => {
-                loadClientEmailSettings(emailClientSelect.value);
-            };
-        }
-
-        // Save Client Email Settings
+        // Save Company Email Settings
         if (emailForm) {
             emailForm.onsubmit = async (e) => {
                 e.preventDefault();
-                const selectedCoId = emailClientSelect ? emailClientSelect.value : null;
-                if (!selectedCoId) {
-                    showToast("Please select a client company.", "error");
-                    return;
-                }
-
-                const comp = db.getCompany(selectedCoId);
-                const companyName = comp ? comp.name : 'Company';
+                const selectedCoId = currentCompany.id;
                 const origText = btnSaveClientEmail ? btnSaveClientEmail.innerText : 'Save';
                 if (btnSaveClientEmail) {
                     btnSaveClientEmail.disabled = true;
@@ -2965,7 +2936,7 @@ export function renderAdminSettings(container) {
                     const isApi = emailProviderApi ? emailProviderApi.checked : false;
                     const payload = {
                         is_enabled: emailIsEnabled ? emailIsEnabled.checked : false,
-                        sender_name: (emailSenderName ? emailSenderName.value.trim() : '') || `${companyName} Overtime Alerts`,
+                        sender_name: (emailSenderName ? emailSenderName.value.trim() : '') || `${currentCompanyName} Overtime Alerts`,
                         sender_email: emailSenderEmail ? emailSenderEmail.value.trim() : '',
                         provider_type: isApi ? 'api_key' : 'smtp',
                         smtp_host: emailSmtpHost ? emailSmtpHost.value.trim() : '',
@@ -2982,7 +2953,7 @@ export function renderAdminSettings(container) {
 
                     const saved = await db.saveCompanyEmailSettings(selectedCoId, payload);
                     updateStatusBadge(saved);
-                    showToast(`Email configuration for ${companyName} saved successfully!`, "success");
+                    showToast(`Email configuration for ${currentCompanyName} saved successfully!`, "success");
                 } catch (err) {
                     console.error("Error saving email settings:", err);
                     showToast(err.message || "Failed to save email configuration.", "error");
@@ -2998,16 +2969,9 @@ export function renderAdminSettings(container) {
         // Send Test Email
         if (btnSendTestEmail) {
             btnSendTestEmail.onclick = async () => {
-                const selectedCoId = emailClientSelect ? emailClientSelect.value : null;
-                if (!selectedCoId) {
-                    showToast("Please select a client company first.", "error");
-                    return;
-                }
-
-                const comp = db.getCompany(selectedCoId);
-                const companyName = comp ? comp.name : 'Company';
+                const selectedCoId = currentCompany.id;
                 const defaultEmail = currentUser?.email || 'admin@example.com';
-                const testRecipient = prompt(`Send test notification email for ${companyName} to:`, defaultEmail);
+                const testRecipient = prompt(`Send test notification email for ${currentCompanyName} to:`, defaultEmail);
                 if (!testRecipient || !testRecipient.trim()) return;
 
                 const origBtnText = btnSendTestEmail.innerText;
@@ -3018,11 +2982,11 @@ export function renderAdminSettings(container) {
                     const result = await db.sendNotificationEmail({
                         companyId: selectedCoId,
                         to: testRecipient.trim(),
-                        subject: `[Clock+ Test] Email Verified for ${companyName}`,
+                        subject: `[Clock+ Test] Email Verified for ${currentCompanyName}`,
                         htmlBody: `
                             <div style="font-family:sans-serif; padding:20px; border:1px solid #e2e8f0; border-radius:10px;">
                                 <h2 style="color:#4f46e5; margin-top:0;">Test Email Verified!</h2>
-                                <p>This test email confirms that the notification configuration for <strong>${companyName}</strong> is active and functional.</p>
+                                <p>This test email confirms that the notification configuration for <strong>${currentCompanyName}</strong> is active and functional.</p>
                                 <p style="font-size:12px; color:#64748b;">Clock+ System &bull; Super Admin Verification</p>
                             </div>
                         `,
@@ -3040,7 +3004,7 @@ export function renderAdminSettings(container) {
             };
         }
 
-        populateClientCompanies();
+        loadCompanyEmailSettings();
     }
 
     loadUsers();
