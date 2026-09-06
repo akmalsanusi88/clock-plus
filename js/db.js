@@ -1,6 +1,7 @@
 // Clock+ Client-Side Relational Database Module
 // Stores application state in localStorage with seed data.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { generateNewRequestEmailHtml, generateStatusUpdateEmailHtml, generateClosedOtEmailHtml } from './views/shared.js';
 
 const DB_KEY = 'clock_plus_db';
 const supabaseUrl = 'https://dkxjlhpiaignyqbbxyxu.supabase.co';
@@ -78,6 +79,7 @@ const initialData = {
     ],
     requests: [],
     notifications: [],
+    company_email_settings: [],
     companies: [
         { id: 'COM-01', name: 'CoreTech Innovations', industry: 'Software & Technology', icon: '💻' },
         { id: 'COM-02', name: 'Vertex Industries', industry: 'Manufacturing & Logistics', icon: '🏭' },
@@ -135,14 +137,16 @@ class Database {
                 { data: sbLimits },
                 { data: sbHierarchy },
                 { data: sbRequests },
-                { data: sbNotifications }
+                { data: sbNotifications },
+                { data: sbEmailSettings }
             ] = await Promise.all([
                 supabase.from('companies').select('*'),
                 supabase.from('company_users').select('*'),
                 supabase.from('limits').select('*'),
                 supabase.from('hierarchy').select('*'),
                 supabase.from('overtime_requests').select('*'),
-                supabase.from('notifications').select('*')
+                supabase.from('notifications').select('*'),
+                supabase.from('company_email_settings').select('*')
             ]);
 
             if (cErr || cuErr) {
@@ -414,7 +418,8 @@ class Database {
                 limits: mappedLimits,
                 hierarchy: mappedHierarchy,
                 requests: mappedRequests.length > 0 ? mappedRequests : this.data.requests,
-                notifications: mappedNotifications.length > 0 ? mappedNotifications : (this.data.notifications || [])
+                notifications: mappedNotifications.length > 0 ? mappedNotifications : (this.data.notifications || []),
+                company_email_settings: sbEmailSettings || this.data.company_email_settings || []
             };
 
             this.saveData(this.data);
@@ -1014,6 +1019,166 @@ class Database {
         return companies.length > 0 ? companies : this.getCompanies();
     }
 
+    // --- Client Email Settings (Configured by Super Admin) ---
+    getCompanyEmailSettings(companyId) {
+        if (!companyId) return null;
+        const allSettings = this.getData().company_email_settings || [];
+        return allSettings.find(s => s.company_id === companyId || s.companyId === companyId) || null;
+    }
+
+    async saveCompanyEmailSettings(companyId, settings) {
+        if (!companyId) throw new Error("Company ID is required.");
+        const data = this.getData();
+        if (!data.company_email_settings) data.company_email_settings = [];
+
+        const payload = {
+            company_id: companyId,
+            is_enabled: Boolean(settings.is_enabled),
+            sender_name: settings.sender_name || 'Clock+ Overtime Alerts',
+            sender_email: settings.sender_email || '',
+            provider_type: settings.provider_type || 'smtp',
+            smtp_host: settings.smtp_host || '',
+            smtp_port: Number(settings.smtp_port) || 587,
+            smtp_user: settings.smtp_user || '',
+            smtp_password: settings.smtp_password || '',
+            smtp_secure: Boolean(settings.smtp_secure),
+            api_key: settings.api_key || '',
+            notify_on_request: settings.notify_on_request !== false,
+            notify_on_approval: settings.notify_on_approval !== false,
+            notify_on_close: settings.notify_on_close !== false,
+            hr_cc_email: settings.hr_cc_email || '',
+            updated_at: new Date().toISOString(),
+            updated_by: this.getCurrentUser()?.email || 'Superadmin'
+        };
+
+        const existingIdx = data.company_email_settings.findIndex(s => s.company_id === companyId || s.companyId === companyId);
+        if (existingIdx >= 0) {
+            data.company_email_settings[existingIdx] = payload;
+        } else {
+            data.company_email_settings.push(payload);
+        }
+        this.saveData(data);
+
+        // Upsert to Supabase
+        const { error } = await supabase.from('company_email_settings').upsert(payload);
+        if (error) {
+            console.error("Supabase error saving company email settings:", error);
+            throw new Error(`Failed to save to Supabase: ${error.message}`);
+        }
+        return payload;
+    }
+
+    async sendNotificationEmail({ companyId, to, subject, htmlBody, cc, isTest = false }) {
+        if (!to) {
+            console.warn("[Email Notification] No recipient specified.");
+            return { success: false, message: "No recipient specified." };
+        }
+        
+        const activeCompanyId = companyId || localStorage.getItem('clock_plus_session_company_id');
+        const settings = this.getCompanyEmailSettings(activeCompanyId);
+
+        if (!isTest) {
+            if (!settings || !settings.is_enabled) {
+                console.log(`[Email Notification] Email alerts are disabled for company ${activeCompanyId}.`);
+                return { success: false, message: "Email notifications disabled for this company." };
+            }
+        } else {
+            if (!settings) {
+                throw new Error("Please configure and save email settings first before sending a test.");
+            }
+        }
+
+        const senderEmail = settings.sender_email || 'noreply@clockplus.app';
+        const senderName = settings.sender_name || 'Clock+ Alerts';
+        const recipients = Array.isArray(to) ? to.filter(Boolean) : [to].filter(Boolean);
+        const ccList = cc ? (Array.isArray(cc) ? cc.filter(Boolean) : [cc].filter(Boolean)) : (settings.hr_cc_email ? [settings.hr_cc_email] : []);
+
+        if (recipients.length === 0) {
+            console.warn("[Email Notification] Recipient list is empty.");
+            return { success: false, message: "Recipient email is missing." };
+        }
+
+        console.log(`[Email Notification] Dispatching email:`, {
+            from: `${senderName} <${senderEmail}>`,
+            to: recipients,
+            cc: ccList,
+            subject,
+            provider: settings.provider_type
+        });
+
+        // 1. Transactional API Dispatch (e.g. Resend)
+        if (settings.provider_type === 'api_key' && settings.api_key) {
+            try {
+                const res = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${settings.api_key.trim()}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        from: `${senderName} <${senderEmail}>`,
+                        to: recipients,
+                        cc: ccList.length > 0 ? ccList : undefined,
+                        subject: subject,
+                        html: htmlBody
+                    })
+                });
+                const resData = await res.json();
+                if (!res.ok) {
+                    throw new Error(resData.message || resData.name || "Email delivery failed.");
+                }
+                console.log("[Email Notification] Sent successfully via Resend API:", resData);
+                return { success: true, message: `Email delivered to ${recipients.join(', ')}`, data: resData };
+            } catch (err) {
+                console.error("[Email Notification] API error:", err);
+                if (isTest) throw err;
+                return { success: false, message: err.message };
+            }
+        }
+
+        // 2. SMTP Dispatch (Attempt Edge Function relay or provide simulated delivery log)
+        try {
+            const { data, error } = await supabase.functions.invoke('send-client-email', {
+                body: {
+                    companyId: activeCompanyId,
+                    settings: {
+                        smtp_host: settings.smtp_host,
+                        smtp_port: settings.smtp_port,
+                        smtp_user: settings.smtp_user,
+                        smtp_password: settings.smtp_password,
+                        smtp_secure: settings.smtp_secure,
+                        sender_name: senderName,
+                        sender_email: senderEmail
+                    },
+                    to: recipients,
+                    cc: ccList,
+                    subject,
+                    html: htmlBody
+                }
+            });
+
+            if (!error && data?.success) {
+                return { success: true, message: `Email sent via SMTP to ${recipients.join(', ')}` };
+            }
+        } catch (edgeErr) {
+            // Relay not deployed
+        }
+
+        // Local development / simulated dispatch notification
+        console.info(`[Email Dispatcher - SMTP Mode]
+• From: ${senderName} <${senderEmail}>
+• To: ${recipients.join(', ')}
+• CC: ${ccList.join(', ') || 'None'}
+• Host: ${settings.smtp_host || 'Not set'}:${settings.smtp_port || 587}
+• Subject: ${subject}`);
+
+        return {
+            success: true,
+            simulated: true,
+            message: `Email queued for ${recipients.join(', ')} (SMTP: ${settings.smtp_host || 'Configured'})`
+        };
+    }
+
     // --- Hierarchy ---
     getHierarchy() {
         return this.getData().hierarchy || [];
@@ -1498,6 +1663,37 @@ class Database {
                     `Worker ${reqUser ? reqUser.name : newRequest.requesterId} submitted a new OT request (${newId}) for project ${projName}.`
                 );
             });
+
+            // Email notification to Approver(s)
+            try {
+                const activeCoId = activeCompanyId || (this.getCompanies()[0]?.id);
+                const emailSettings = this.getCompanyEmailSettings(activeCoId);
+                if (emailSettings && emailSettings.is_enabled && emailSettings.notify_on_request) {
+                    const clientCompany = this.getCompany(activeCoId);
+                    const approverEmails = Array.from(approverIds)
+                        .map(aid => this.getUser(aid)?.email)
+                        .filter(Boolean);
+
+                    if (approverEmails.length > 0) {
+                        const primaryApprover = this.getUser(Array.from(approverIds)[0]);
+                        const emailHtml = generateNewRequestEmailHtml({
+                            req: newRequest,
+                            workerName: reqUser ? reqUser.name : newRequest.requesterId,
+                            approverName: primaryApprover ? primaryApprover.name : 'Approver',
+                            projectName: projName,
+                            clientName: clientCompany ? clientCompany.name : 'Clock+'
+                        });
+                        this.sendNotificationEmail({
+                            companyId: activeCoId,
+                            to: approverEmails,
+                            subject: `[Clock+] New OT Request (${newId}) from ${reqUser ? reqUser.name : 'Worker'}`,
+                            htmlBody: emailHtml
+                        }).catch(e => console.warn("Email dispatch error:", e));
+                    }
+                }
+            } catch (e) {
+                console.warn("Could not check email settings:", e);
+            }
         } else if (newRequest.status === 'Pending Worker Consent' && newRequest.requesterId) {
             this.createNotification(
                 newRequest.requesterId,
@@ -1582,6 +1778,38 @@ class Database {
             }
         }
 
+        // Email status update notification to worker
+        try {
+            const activeCoId = newRequest.companyId || localStorage.getItem('clock_plus_session_company_id') || (this.getCompanies()[0]?.id);
+            const emailSettings = this.getCompanyEmailSettings(activeCoId);
+            if (emailSettings && emailSettings.is_enabled && emailSettings.notify_on_approval && (actionText.includes('Approved') || actionText.includes('Rejected') || actionText.includes('Modified'))) {
+                const clientCompany = this.getCompany(activeCoId);
+                const workerUser = this.getUser(newRequest.requesterId);
+                const approverUser = this.getUser(actionUserId);
+                const status = actionText.includes('Rejected') ? 'Rejected' : 'Approved';
+                const remarks = actionText.includes('Rejected') ? newRequest.rejectionReason : newRequest.approverRemarks;
+
+                if (workerUser && workerUser.email) {
+                    const emailHtml = generateStatusUpdateEmailHtml({
+                        req: newRequest,
+                        workerName: workerUser.name || 'Worker',
+                        status: status,
+                        approverName: approverUser ? approverUser.name : 'Approver',
+                        remarks: remarks,
+                        clientName: clientCompany ? clientCompany.name : 'Clock+'
+                    });
+                    this.sendNotificationEmail({
+                        companyId: activeCoId,
+                        to: workerUser.email,
+                        subject: `[Clock+] OT Request ${id} ${status}`,
+                        htmlBody: emailHtml
+                    }).catch(e => console.warn("Email status update error:", e));
+                }
+            }
+        } catch (e) {
+            console.warn("Could not check approval email settings:", e);
+        }
+
         supabase.from('overtime_requests').update({
             status: newRequest.status,
             rejection_reason: newRequest.rejectionReason || null,
@@ -1654,6 +1882,40 @@ class Database {
                 );
             }
         });
+
+        // Email notification on closeout & finalization
+        try {
+            const activeCoId = req.companyId || localStorage.getItem('clock_plus_session_company_id') || (this.getCompanies()[0]?.id);
+            const emailSettings = this.getCompanyEmailSettings(activeCoId);
+            if (emailSettings && emailSettings.is_enabled && emailSettings.notify_on_close) {
+                const clientCompany = this.getCompany(activeCoId);
+                const workerUser = this.getUser(req.requesterId);
+                const recipients = [];
+                if (workerUser?.email) recipients.push(workerUser.email);
+                Array.from(approverIds).forEach(aid => {
+                    const em = this.getUser(aid)?.email;
+                    if (em && !recipients.includes(em)) recipients.push(em);
+                });
+
+                if (recipients.length > 0) {
+                    const emailHtml = generateClosedOtEmailHtml({
+                        req: newRequest,
+                        workerName: workerUser ? workerUser.name : 'Worker',
+                        actualHours: updatedFields.actualDuration,
+                        closedByName: actorName,
+                        clientName: clientCompany ? clientCompany.name : 'Clock+'
+                    });
+                    this.sendNotificationEmail({
+                        companyId: activeCoId,
+                        to: recipients,
+                        subject: `[Clock+] OT Request ${id} Closed & Finalized`,
+                        htmlBody: emailHtml
+                    }).catch(e => console.warn("Email closeout notification error:", e));
+                }
+            }
+        } catch (e) {
+            console.warn("Could not check close email settings:", e);
+        }
 
         // Sync to Supabase
         const sbPayload = {

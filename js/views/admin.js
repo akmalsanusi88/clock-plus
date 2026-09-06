@@ -2069,6 +2069,9 @@ export function renderAdminSettings(container) {
                 <button type="button" class="settings-tab-btn" data-tab="tab-limits">
                     ${icons.limits} Compliance Hour Thresholds
                 </button>
+                <button type="button" class="settings-tab-btn" data-tab="tab-email-settings">
+                    ${icons.email} Client Email Settings
+                </button>
             ` : ''}
         </div>
 
@@ -2260,6 +2263,168 @@ export function renderAdminSettings(container) {
                 </form>
             </div>
         </div>
+
+        ${isSuperAdmin ? `
+        <!-- TAB 4: Client Email Settings (Super Admin Only) -->
+        <div id="tab-email-settings" class="settings-tab-pane" style="display: none;">
+            <div class="card glass-panel" style="max-width: 780px;">
+                <div class="card-header" style="margin-bottom: 14px;">
+                    <div>
+                        <h2 class="card-title">${icons.email} Client Email Notification Settings</h2>
+                        <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+                            Configure customized email notifications and server credentials for each client company.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Client Selector Bar -->
+                <div style="background: rgba(99, 102, 241, 0.05); border: 1.5px solid rgba(99, 102, 241, 0.18); border-radius: 12px; padding: 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;">
+                    <div style="flex: 1; min-width: 240px;">
+                        <label for="email-client-select" style="font-size: 0.82rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 6px;">
+                            Select Client Company
+                        </label>
+                        <select id="email-client-select" style="width: 100%; background: #ffffff !important; color: #0f172a !important; font-weight: 600; padding: 10px 14px; border-radius: 8px; border: 1.5px solid var(--border-color);">
+                            <!-- Populated with companies -->
+                        </select>
+                    </div>
+                    <div id="email-client-status-badge" style="display: flex; align-items: center;">
+                        <!-- Status Badge -->
+                    </div>
+                </div>
+
+                <form id="settings-client-email-form">
+                    <!-- Master Toggle Card -->
+                    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 16px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between;">
+                        <div>
+                            <div style="font-size: 0.95rem; font-weight: 700; color: var(--text-main);">Enable Email Notifications</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                                Turn email alerts ON or OFF for this specific client company.
+                            </div>
+                        </div>
+                        <label style="position: relative; display: inline-block; width: 46px; height: 24px; margin: 0; cursor: pointer;">
+                            <input type="checkbox" id="email-is-enabled" style="opacity: 0; width: 0; height: 0;">
+                            <span class="email-toggle-slider"></span>
+                        </label>
+                    </div>
+
+                    <!-- Sender Identity -->
+                    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+                        <h3 style="font-size: 0.92rem; font-weight: 700; color: var(--text-main); margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;color:var(--primary);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                            Sender Profile (From:)
+                        </h3>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="email-sender-name" style="font-weight: 600; font-size: 0.84rem;">Display Name</label>
+                                <input type="text" id="email-sender-name" placeholder="e.g. Acme Corp Overtime System" style="background:#ffffff !important; color:#0f172a !important;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="email-sender-email" style="font-weight: 600; font-size: 0.84rem;">Sender Email Address</label>
+                                <input type="email" id="email-sender-email" placeholder="e.g. ot-alerts@acme.com" style="background:#ffffff !important; color:#0f172a !important;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Mail Provider & Credentials -->
+                    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; margin-bottom: 20px;">
+                        <h3 style="font-size: 0.92rem; font-weight: 700; color: var(--text-main); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;color:var(--primary);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01" /></svg>
+                            Delivery Method & Mail Server
+                        </h3>
+                        
+                        <div style="display: flex; gap: 18px; margin-bottom: 16px; font-size: 0.86rem; font-weight: 600; flex-wrap: wrap;">
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="radio" name="email-provider-type" value="smtp" id="email-provider-smtp" checked style="cursor: pointer;">
+                                <span>Company SMTP Server (Gmail / Office 365 / Corporate)</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                                <input type="radio" name="email-provider-type" value="api_key" id="email-provider-api" style="cursor: pointer;">
+                                <span>Transactional API (Resend / SendGrid)</span>
+                            </label>
+                        </div>
+
+                        <!-- SMTP Fields -->
+                        <div id="email-smtp-section">
+                            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 14px; margin-bottom: 12px;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="email-smtp-host" style="font-weight: 600; font-size: 0.84rem;">SMTP Host</label>
+                                    <input type="text" id="email-smtp-host" placeholder="smtp.gmail.com or mail.company.com" style="background:#ffffff !important; color:#0f172a !important;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="email-smtp-port" style="font-weight: 600; font-size: 0.84rem;">Port</label>
+                                    <input type="number" id="email-smtp-port" placeholder="587" value="587" style="background:#ffffff !important; color:#0f172a !important;">
+                                </div>
+                            </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 12px;">
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="email-smtp-user" style="font-weight: 600; font-size: 0.84rem;">SMTP Username / Email</label>
+                                    <input type="text" id="email-smtp-user" placeholder="user@company.com" style="background:#ffffff !important; color:#0f172a !important;">
+                                </div>
+                                <div class="form-group" style="margin-bottom: 0;">
+                                    <label for="email-smtp-pass" style="font-weight: 600; font-size: 0.84rem;">SMTP Password / App Password</label>
+                                    <input type="password" id="email-smtp-pass" placeholder="••••••••••••" style="background:#ffffff !important; color:#0f172a !important;">
+                                </div>
+                            </div>
+                            <label style="display: flex; align-items: center; gap: 6px; font-size: 0.82rem; font-weight: 500; cursor: pointer; color: var(--text-muted);">
+                                <input type="checkbox" id="email-smtp-secure" checked style="cursor: pointer;">
+                                <span>Use SSL/TLS encryption (Recommended)</span>
+                            </label>
+                        </div>
+
+                        <!-- API Key Fields -->
+                        <div id="email-api-section" style="display: none;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="email-api-key" style="font-weight: 600; font-size: 0.84rem;">API Key (Resend / SendGrid)</label>
+                                <input type="password" id="email-api-key" placeholder="re_123456789..." style="background:#ffffff !important; color:#0f172a !important;">
+                                <span style="font-size: 0.76rem; color: var(--text-muted); margin-top: 4px; display: block;">
+                                    Paste the client company's Resend API key or transactional email token.
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Trigger Rules & HR CC -->
+                    <div style="background: #ffffff; border: 1px solid var(--border-color); border-radius: 10px; padding: 18px; margin-bottom: 24px;">
+                        <h3 style="font-size: 0.92rem; font-weight: 700; color: var(--text-main); margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" style="width:16px;height:16px;color:var(--primary);"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" /></svg>
+                            Notification Events & Recipient Rules
+                        </h3>
+                        <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px;">
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 600; cursor: pointer;">
+                                <input type="checkbox" id="email-notify-request" checked style="width: 16px; height: 16px; cursor: pointer;">
+                                <span>Notify Approver / Manager when worker submits new OT</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 600; cursor: pointer;">
+                                <input type="checkbox" id="email-notify-approval" checked style="width: 16px; height: 16px; cursor: pointer;">
+                                <span>Notify Worker when OT is Approved or Rejected</span>
+                            </label>
+                            <label style="display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 600; cursor: pointer;">
+                                <input type="checkbox" id="email-notify-close" checked style="width: 16px; height: 16px; cursor: pointer;">
+                                <span>Notify Approver & Worker when OT is closed with actual hours</span>
+                            </label>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="email-hr-cc" style="font-weight: 600; font-size: 0.84rem;">Company HR / Payroll CC Email (Optional)</label>
+                            <input type="email" id="email-hr-cc" placeholder="hr-payroll@company.com" style="background:#ffffff !important; color:#0f172a !important;">
+                            <span style="font-size: 0.74rem; color: var(--text-muted); margin-top: 4px; display: block;">
+                                If filled, all overtime notifications for this company will automatically CC this email address.
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                        <button type="button" class="btn btn-secondary btn-sm" id="btn-send-test-email" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 16px; font-weight: 600;">
+                            ${icons.email} Send Test Email
+                        </button>
+                        <button type="submit" class="btn btn-primary btn-sm" id="btn-save-client-email" style="padding: 9px 24px; font-weight: 600;">
+                            Save Client Email Settings
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        ` : ''}
     `;
 
     // Tab Switching Handling
@@ -2656,6 +2821,227 @@ export function renderAdminSettings(container) {
 
         showToast("Compliance threshold and rest deduction rule saved successfully.", "success");
     };
+
+    // --- Super Admin Client Email Settings Controller ---
+    if (isSuperAdmin) {
+        const emailClientSelect = document.getElementById('email-client-select');
+        const emailClientStatusBadge = document.getElementById('email-client-status-badge');
+        const emailForm = document.getElementById('settings-client-email-form');
+        const emailIsEnabled = document.getElementById('email-is-enabled');
+        const emailSenderName = document.getElementById('email-sender-name');
+        const emailSenderEmail = document.getElementById('email-sender-email');
+        const emailProviderSmtp = document.getElementById('email-provider-smtp');
+        const emailProviderApi = document.getElementById('email-provider-api');
+        const emailSmtpSection = document.getElementById('email-smtp-section');
+        const emailApiSection = document.getElementById('email-api-section');
+        const emailSmtpHost = document.getElementById('email-smtp-host');
+        const emailSmtpPort = document.getElementById('email-smtp-port');
+        const emailSmtpUser = document.getElementById('email-smtp-user');
+        const emailSmtpPass = document.getElementById('email-smtp-pass');
+        const emailSmtpSecure = document.getElementById('email-smtp-secure');
+        const emailApiKey = document.getElementById('email-api-key');
+        const emailNotifyRequest = document.getElementById('email-notify-request');
+        const emailNotifyApproval = document.getElementById('email-notify-approval');
+        const emailNotifyClose = document.getElementById('email-notify-close');
+        const emailHrCc = document.getElementById('email-hr-cc');
+        const btnSendTestEmail = document.getElementById('btn-send-test-email');
+        const btnSaveClientEmail = document.getElementById('btn-save-client-email');
+
+        const updateStatusBadge = (settings) => {
+            if (!emailClientStatusBadge) return;
+            if (settings && settings.is_enabled) {
+                emailClientStatusBadge.innerHTML = `<span class="badge badge-approved" style="font-size:0.82rem; padding:6px 12px; font-weight:700;">Active &bull; Sending Enabled</span>`;
+            } else if (settings && (settings.sender_email || settings.smtp_host || settings.api_key)) {
+                emailClientStatusBadge.innerHTML = `<span class="badge badge-warning" style="font-size:0.82rem; padding:6px 12px; font-weight:700;">Configured &bull; Disabled</span>`;
+            } else {
+                emailClientStatusBadge.innerHTML = `<span class="badge" style="background:#f1f5f9; color:#64748b; font-size:0.82rem; padding:6px 12px; font-weight:600;">Not Configured</span>`;
+            }
+        };
+
+        const loadClientEmailSettings = (companyId) => {
+            if (!companyId) return;
+            const settings = db.getCompanyEmailSettings(companyId);
+            const comp = db.getCompany(companyId);
+            const companyName = comp ? comp.name : 'Company';
+
+            if (settings) {
+                if (emailIsEnabled) emailIsEnabled.checked = Boolean(settings.is_enabled);
+                if (emailSenderName) emailSenderName.value = settings.sender_name || `${companyName} Overtime Alerts`;
+                if (emailSenderEmail) emailSenderEmail.value = settings.sender_email || '';
+                
+                const isApi = settings.provider_type === 'api_key';
+                if (emailProviderApi) emailProviderApi.checked = isApi;
+                if (emailProviderSmtp) emailProviderSmtp.checked = !isApi;
+                if (emailSmtpSection) emailSmtpSection.style.display = isApi ? 'none' : 'block';
+                if (emailApiSection) emailApiSection.style.display = isApi ? 'block' : 'none';
+
+                if (emailSmtpHost) emailSmtpHost.value = settings.smtp_host || '';
+                if (emailSmtpPort) emailSmtpPort.value = settings.smtp_port || 587;
+                if (emailSmtpUser) emailSmtpUser.value = settings.smtp_user || '';
+                if (emailSmtpPass) emailSmtpPass.value = settings.smtp_password || '';
+                if (emailSmtpSecure) emailSmtpSecure.checked = settings.smtp_secure !== false;
+                if (emailApiKey) emailApiKey.value = settings.api_key || '';
+
+                if (emailNotifyRequest) emailNotifyRequest.checked = settings.notify_on_request !== false;
+                if (emailNotifyApproval) emailNotifyApproval.checked = settings.notify_on_approval !== false;
+                if (emailNotifyClose) emailNotifyClose.checked = settings.notify_on_close !== false;
+                if (emailHrCc) emailHrCc.value = settings.hr_cc_email || '';
+            } else {
+                if (emailIsEnabled) emailIsEnabled.checked = false;
+                if (emailSenderName) emailSenderName.value = `${companyName} Overtime Alerts`;
+                if (emailSenderEmail) emailSenderEmail.value = '';
+                if (emailProviderSmtp) emailProviderSmtp.checked = true;
+                if (emailSmtpSection) emailSmtpSection.style.display = 'block';
+                if (emailApiSection) emailApiSection.style.display = 'none';
+                if (emailSmtpHost) emailSmtpHost.value = '';
+                if (emailSmtpPort) emailSmtpPort.value = 587;
+                if (emailSmtpUser) emailSmtpUser.value = '';
+                if (emailSmtpPass) emailSmtpPass.value = '';
+                if (emailSmtpSecure) emailSmtpSecure.checked = true;
+                if (emailApiKey) emailApiKey.value = '';
+                if (emailNotifyRequest) emailNotifyRequest.checked = true;
+                if (emailNotifyApproval) emailNotifyApproval.checked = true;
+                if (emailNotifyClose) emailNotifyClose.checked = true;
+                if (emailHrCc) emailHrCc.value = '';
+            }
+
+            updateStatusBadge(settings);
+        };
+
+        // Toggle SMTP vs API sections
+        if (emailProviderSmtp && emailProviderApi) {
+            emailProviderSmtp.onchange = () => {
+                if (emailSmtpSection) emailSmtpSection.style.display = 'block';
+                if (emailApiSection) emailApiSection.style.display = 'none';
+            };
+            emailProviderApi.onchange = () => {
+                if (emailSmtpSection) emailSmtpSection.style.display = 'none';
+                if (emailApiSection) emailApiSection.style.display = 'block';
+            };
+        }
+
+        const populateClientCompanies = () => {
+            if (!emailClientSelect) return;
+            const companies = db.getCompanies();
+            const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+
+            emailClientSelect.innerHTML = companies.map(c => `
+                <option value="${c.id}" ${c.id === activeCompanyId ? 'selected' : ''}>
+                    ${c.name} (${c.id})
+                </option>
+            `).join('');
+
+            if (companies.length > 0) {
+                const targetId = emailClientSelect.value || companies[0].id;
+                loadClientEmailSettings(targetId);
+            }
+        };
+
+        if (emailClientSelect) {
+            emailClientSelect.onchange = () => {
+                loadClientEmailSettings(emailClientSelect.value);
+            };
+        }
+
+        // Save Client Email Settings
+        if (emailForm) {
+            emailForm.onsubmit = async (e) => {
+                e.preventDefault();
+                const selectedCoId = emailClientSelect ? emailClientSelect.value : null;
+                if (!selectedCoId) {
+                    showToast("Please select a client company.", "error");
+                    return;
+                }
+
+                const comp = db.getCompany(selectedCoId);
+                const companyName = comp ? comp.name : 'Company';
+                const origText = btnSaveClientEmail ? btnSaveClientEmail.innerText : 'Save';
+                if (btnSaveClientEmail) {
+                    btnSaveClientEmail.disabled = true;
+                    btnSaveClientEmail.innerText = "Saving...";
+                }
+
+                try {
+                    const isApi = emailProviderApi ? emailProviderApi.checked : false;
+                    const payload = {
+                        is_enabled: emailIsEnabled ? emailIsEnabled.checked : false,
+                        sender_name: (emailSenderName ? emailSenderName.value.trim() : '') || `${companyName} Overtime Alerts`,
+                        sender_email: emailSenderEmail ? emailSenderEmail.value.trim() : '',
+                        provider_type: isApi ? 'api_key' : 'smtp',
+                        smtp_host: emailSmtpHost ? emailSmtpHost.value.trim() : '',
+                        smtp_port: Number(emailSmtpPort ? emailSmtpPort.value : 587) || 587,
+                        smtp_user: emailSmtpUser ? emailSmtpUser.value.trim() : '',
+                        smtp_password: emailSmtpPass ? emailSmtpPass.value : '',
+                        smtp_secure: emailSmtpSecure ? emailSmtpSecure.checked : true,
+                        api_key: emailApiKey ? emailApiKey.value.trim() : '',
+                        notify_on_request: emailNotifyRequest ? emailNotifyRequest.checked : true,
+                        notify_on_approval: emailNotifyApproval ? emailNotifyApproval.checked : true,
+                        notify_on_close: emailNotifyClose ? emailNotifyClose.checked : true,
+                        hr_cc_email: emailHrCc ? emailHrCc.value.trim() : ''
+                    };
+
+                    const saved = await db.saveCompanyEmailSettings(selectedCoId, payload);
+                    updateStatusBadge(saved);
+                    showToast(`Email configuration for ${companyName} saved successfully!`, "success");
+                } catch (err) {
+                    console.error("Error saving email settings:", err);
+                    showToast(err.message || "Failed to save email configuration.", "error");
+                } finally {
+                    if (btnSaveClientEmail) {
+                        btnSaveClientEmail.disabled = false;
+                        btnSaveClientEmail.innerText = origText;
+                    }
+                }
+            };
+        }
+
+        // Send Test Email
+        if (btnSendTestEmail) {
+            btnSendTestEmail.onclick = async () => {
+                const selectedCoId = emailClientSelect ? emailClientSelect.value : null;
+                if (!selectedCoId) {
+                    showToast("Please select a client company first.", "error");
+                    return;
+                }
+
+                const comp = db.getCompany(selectedCoId);
+                const companyName = comp ? comp.name : 'Company';
+                const defaultEmail = currentUser?.email || 'admin@example.com';
+                const testRecipient = prompt(`Send test notification email for ${companyName} to:`, defaultEmail);
+                if (!testRecipient || !testRecipient.trim()) return;
+
+                const origBtnText = btnSendTestEmail.innerText;
+                btnSendTestEmail.disabled = true;
+                btnSendTestEmail.innerText = "Sending Test...";
+
+                try {
+                    const result = await db.sendNotificationEmail({
+                        companyId: selectedCoId,
+                        to: testRecipient.trim(),
+                        subject: `[Clock+ Test] Email Verified for ${companyName}`,
+                        htmlBody: `
+                            <div style="font-family:sans-serif; padding:20px; border:1px solid #e2e8f0; border-radius:10px;">
+                                <h2 style="color:#4f46e5; margin-top:0;">Test Email Verified!</h2>
+                                <p>This test email confirms that the notification configuration for <strong>${companyName}</strong> is active and functional.</p>
+                                <p style="font-size:12px; color:#64748b;">Clock+ System &bull; Super Admin Verification</p>
+                            </div>
+                        `,
+                        isTest: true
+                    });
+
+                    showToast(result.message || "Test email dispatched successfully!", "success");
+                } catch (err) {
+                    console.error("Test email error:", err);
+                    showToast(err.message || "Failed to send test email.", "error");
+                } finally {
+                    btnSendTestEmail.disabled = false;
+                    btnSendTestEmail.innerText = origBtnText;
+                }
+            };
+        }
+
+        populateClientCompanies();
+    }
 
     loadUsers();
     loadHierarchy();

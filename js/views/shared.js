@@ -811,7 +811,8 @@ export const icons = {
     times: `<svg width="18" height="18" style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
     assignment: `<svg width="18" height="18" style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>`,
     settings: `<svg width="18" height="18" style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>`,
-    info: `<svg width="18" height="18" style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`
+    info: `<svg width="18" height="18" style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>`,
+    email: `<svg width="18" height="18" style="width:18px;height:18px;vertical-align:middle;display:inline-block;flex-shrink:0;" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>`
 };
 
 export function renderRoleBadge(role) {
@@ -838,4 +839,103 @@ export function formatRoleName(role) {
     if (r === 'superior' || r === 'manager') return 'Manager / Approver';
     if (r === 'supervisor' || r === 'coordinator') return 'Site Supervisor / Coordinator';
     return 'Worker / Employee';
+}
+
+// Generate clean, modern HTML email templates for notifications
+export function generateNewRequestEmailHtml({ req, workerName, approverName, projectName, clientName }) {
+    const company = clientName || 'Clock+ System';
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;color:#0f172a;}.card{max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;padding:28px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}.header{border-bottom:2px solid #4f46e5;padding-bottom:16px;margin-bottom:20px;}.badge{display:inline-block;padding:4px 10px;background:#fef3c7;color:#92400e;border-radius:6px;font-size:12px;font-weight:700;}.table{width:100%;margin-top:16px;border-collapse:collapse;}.table td{padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;}.label{color:#64748b;font-weight:600;width:35%;}.btn{display:inline-block;margin-top:24px;background:#4f46e5;color:#ffffff !important;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;font-size:14px;text-align:center;}</style></head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div style="font-size:12px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">${company} &bull; Overtime Notification</div>
+            <h2 style="margin:6px 0 0 0;font-size:20px;color:#1e1b4b;">New Overtime Request Awaiting Approval</h2>
+        </div>
+        <p style="font-size:14px;color:#334155;line-height:1.5;">Hello <strong>${approverName || 'Approver'}</strong>,</p>
+        <p style="font-size:14px;color:#334155;line-height:1.5;">Worker <strong>${workerName || 'Worker'}</strong> has submitted an overtime request that requires your review.</p>
+        <div style="margin:12px 0;"><span class="badge">Pending Approval</span></div>
+        <table class="table">
+            <tr><td class="label">Request ID:</td><td><strong>${req.id}</strong></td></tr>
+            <tr><td class="label">Project / Reason:</td><td>${projectName || req.project || '-'}</td></tr>
+            <tr><td class="label">OT Date:</td><td>${req.dateStart || (req.startDate ? req.startDate.slice(0, 10) : '-')}</td></tr>
+            <tr><td class="label">Time:</td><td>${req.timeStart || '-'} to ${req.timeEnd || '-'}</td></tr>
+            <tr><td class="label">Claimable Hours:</td><td><strong>${Number(req.duration || 0).toFixed(1)} hrs</strong></td></tr>
+            ${req.targetWork ? `<tr><td class="label">Target Work:</td><td>${req.targetWork}</td></tr>` : ''}
+        </table>
+        <div style="text-align:center;">
+            <a href="https://clock-plus.vercel.app" class="btn">Open Clock+ to Review & Approve</a>
+        </div>
+        <div style="margin-top:28px;padding-top:14px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;text-align:center;">
+            Automated notification generated by Clock+ for ${company}.
+        </div>
+    </div>
+</body>
+</html>`;
+}
+
+export function generateStatusUpdateEmailHtml({ req, workerName, status, approverName, remarks, clientName }) {
+    const company = clientName || 'Clock+ System';
+    const isApproved = status === 'Approved';
+    const badgeBg = isApproved ? '#ecfdf5' : '#fef2f2';
+    const badgeColor = isApproved ? '#047857' : '#b91c1c';
+    const headerBorder = isApproved ? '#10b981' : '#ef4444';
+
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;color:#0f172a;}.card{max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;padding:28px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}.header{border-bottom:2px solid ${headerBorder};padding-bottom:16px;margin-bottom:20px;}.badge{display:inline-block;padding:5px 12px;background:${badgeBg};color:${badgeColor};border-radius:6px;font-size:13px;font-weight:700;}.table{width:100%;margin-top:16px;border-collapse:collapse;}.table td{padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;}.label{color:#64748b;font-weight:600;width:35%;}.btn{display:inline-block;margin-top:24px;background:#4f46e5;color:#ffffff !important;text-decoration:none;padding:12px 24px;border-radius:8px;font-weight:700;font-size:14px;text-align:center;}</style></head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div style="font-size:12px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">${company} &bull; Overtime Status Update</div>
+            <h2 style="margin:6px 0 0 0;font-size:20px;color:#1e1b4b;">Overtime Request ${status}</h2>
+        </div>
+        <p style="font-size:14px;color:#334155;line-height:1.5;">Hello <strong>${workerName || 'Worker'}</strong>,</p>
+        <p style="font-size:14px;color:#334155;line-height:1.5;">Your overtime request (<strong>${req.id}</strong>) has been <strong>${status}</strong> by ${approverName || 'Approver'}.</p>
+        <div style="margin:12px 0;"><span class="badge">${status}</span></div>
+        <table class="table">
+            <tr><td class="label">Request ID:</td><td><strong>${req.id}</strong></td></tr>
+            <tr><td class="label">Date:</td><td>${req.dateStart || (req.startDate ? req.startDate.slice(0, 10) : '-')}</td></tr>
+            <tr><td class="label">Approved Hours:</td><td><strong>${Number(req.duration || 0).toFixed(1)} hrs</strong></td></tr>
+            ${remarks ? `<tr><td class="label">Remarks / Notes:</td><td><em>${remarks}</em></td></tr>` : ''}
+        </table>
+        <div style="text-align:center;">
+            <a href="https://clock-plus.vercel.app" class="btn">View Request in Clock+</a>
+        </div>
+        <div style="margin-top:28px;padding-top:14px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;text-align:center;">
+            Automated notification generated by Clock+ for ${company}.
+        </div>
+    </div>
+</body>
+</html>`;
+}
+
+export function generateClosedOtEmailHtml({ req, workerName, actualHours, closedByName, clientName }) {
+    const company = clientName || 'Clock+ System';
+    return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><style>body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;margin:0;padding:24px;color:#0f172a;}.card{max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;border:1px solid #e2e8f0;padding:28px;box-shadow:0 4px 12px rgba(0,0,0,0.05);}.header{border-bottom:2px solid #059669;padding-bottom:16px;margin-bottom:20px;}.badge{display:inline-block;padding:5px 12px;background:#ecfdf5;color:#047857;border-radius:6px;font-size:13px;font-weight:700;}.table{width:100%;margin-top:16px;border-collapse:collapse;}.table td{padding:8px 0;border-bottom:1px solid #f1f5f9;font-size:14px;}.label{color:#64748b;font-weight:600;width:35%;}</style></head>
+<body>
+    <div class="card">
+        <div class="header">
+            <div style="font-size:12px;color:#64748b;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">${company} &bull; Overtime Finalized</div>
+            <h2 style="margin:6px 0 0 0;font-size:20px;color:#1e1b4b;">Overtime Session Closed & Finalized</h2>
+        </div>
+        <p style="font-size:14px;color:#334155;line-height:1.5;">Overtime request <strong>${req.id}</strong> for <strong>${workerName}</strong> has been successfully closed and submitted into final payroll records.</p>
+        <div style="margin:12px 0;"><span class="badge">Completed &bull; ${Number(actualHours || req.actualDuration || req.duration || 0).toFixed(1)} hrs</span></div>
+        <table class="table">
+            <tr><td class="label">Request ID:</td><td><strong>${req.id}</strong></td></tr>
+            <tr><td class="label">Final Claimable:</td><td><strong>${Number(actualHours || req.actualDuration || req.duration || 0).toFixed(1)} hrs</strong></td></tr>
+            <tr><td class="label">Closed By:</td><td>${closedByName || 'Supervisor'}</td></tr>
+        </table>
+        <div style="margin-top:28px;padding-top:14px;border-top:1px solid #f1f5f9;font-size:11px;color:#94a3b8;text-align:center;">
+            Automated notification generated by Clock+ for ${company}.
+        </div>
+    </div>
+</body>
+</html>`;
 }
