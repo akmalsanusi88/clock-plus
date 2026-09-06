@@ -892,6 +892,11 @@ class Database {
     }
 
     deleteUser(id) {
+        const currentUser = this.getCurrentUser();
+        if (!currentUser || currentUser.role !== 'superadmin') {
+            throw new Error("Unauthorized: Only Super Administrators have the authority to delete user accounts.");
+        }
+
         const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
         if (!activeCompanyId) return;
 
@@ -2014,6 +2019,93 @@ class Database {
         });
 
         return newRequest;
+    }
+
+    // Superadmin-exclusive OT Override
+    overrideRequest(id, overrideData, actionUserId) {
+        const currentUser = this.getCurrentUser();
+        const actorRole = currentUser ? currentUser.role : null;
+        if (actorRole !== 'superadmin') {
+            throw new Error("Unauthorized: Only Super Administrators can override overtime records.");
+        }
+
+        const data = this.getData();
+        const index = data.requests.findIndex(r => r.id === id);
+        if (index === -1) throw new Error(`Request ${id} not found.`);
+
+        const oldRequest = data.requests[index];
+        const actorId = actionUserId || (currentUser ? currentUser.id : 'superadmin');
+        const actorName = currentUser ? (currentUser.name || currentUser.email) : 'Super Administrator';
+
+        const history = Array.isArray(oldRequest.history) ? [...oldRequest.history] : [];
+        history.push({
+            timestamp: new Date().toISOString(),
+            userId: actorId,
+            action: `Record overridden by Superadmin ${actorName}`
+        });
+
+        const newRequest = {
+            ...oldRequest,
+            ...overrideData,
+            history
+        };
+
+        data.requests[index] = newRequest;
+        this.saveData(data);
+
+        // Sync to Supabase
+        const sbPayload = {
+            project: newRequest.project,
+            status: newRequest.status,
+            date_start: newRequest.dateStart || (newRequest.startDate ? newRequest.startDate.slice(0, 10) : null),
+            date_end: newRequest.dateEnd || (newRequest.endDate ? newRequest.endDate.slice(0, 10) : null),
+            time_start: newRequest.timeStart || null,
+            time_end: newRequest.timeEnd || null,
+            start_date: newRequest.startDate,
+            end_date: newRequest.endDate,
+            duration: Number(newRequest.duration) || 0,
+            actual_start_date: newRequest.actualStartDate || null,
+            actual_end_date: newRequest.actualEndDate || null,
+            actual_duration: newRequest.actualDuration != null ? Number(newRequest.actualDuration) : null,
+            actual_gross_duration: newRequest.actualGrossDuration != null ? Number(newRequest.actualGrossDuration) : null,
+            actual_rest_deduction: newRequest.actualRestDeduction != null ? Number(newRequest.actualRestDeduction) : null,
+            target_work: newRequest.targetWork || '',
+            work_progress: newRequest.workProgress || '',
+            approver_remarks: newRequest.approverRemarks || null,
+            rejection_reason: newRequest.rejectionReason || null,
+            closing_remarks: newRequest.closingRemarks || null
+        };
+
+        supabase.from('overtime_requests').update(sbPayload).eq('id', id).then(({ error }) => {
+            if (error) console.error("Error updating overtime request override in Supabase:", error);
+        });
+
+        window.dispatchEvent(new Event('clock_plus_db_update'));
+        return newRequest;
+    }
+
+    // Superadmin-exclusive OT Deletion
+    deleteRequest(id, actionUserId) {
+        const currentUser = this.getCurrentUser();
+        const actorRole = currentUser ? currentUser.role : null;
+        if (actorRole !== 'superadmin') {
+            throw new Error("Unauthorized: Only Super Administrators can delete overtime records.");
+        }
+
+        const data = this.getData();
+        const index = data.requests.findIndex(r => r.id === id);
+        if (index === -1) throw new Error(`Request ${id} not found.`);
+
+        const removedRequest = data.requests.splice(index, 1)[0];
+        this.saveData(data);
+
+        // Delete from Supabase
+        supabase.from('overtime_requests').delete().eq('id', id).then(({ error }) => {
+            if (error) console.error("Error deleting overtime request from Supabase:", error);
+        });
+
+        window.dispatchEvent(new Event('clock_plus_db_update'));
+        return removedRequest;
     }
 
     // --- Notifications ---

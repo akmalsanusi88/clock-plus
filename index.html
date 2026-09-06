@@ -225,6 +225,109 @@
         </div>
     </div>
 
+    <!-- Superadmin OT Override Modal -->
+    <div class="modal-overlay" id="superadmin-ot-override-modal">
+        <div class="modal-box glass-panel" style="max-width: 580px; width: 95%; max-height: 90vh; overflow-y: auto;">
+            <div class="modal-drag-handle"></div>
+            <div class="modal-header" style="border-bottom: 2px solid #6366f1; padding-bottom: 12px;">
+                <div>
+                    <h3 class="modal-title" style="color: #4338ca; display: flex; align-items: center; gap: 8px; margin: 0; font-size: 1.1rem;">
+                        Superadmin Record Override
+                    </h3>
+                    <div id="sa-override-subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 2px;">
+                        Directly modify official timesheet, schedule, status, and claimable hours.
+                    </div>
+                </div>
+                <span class="modal-close" onclick="document.getElementById('superadmin-ot-override-modal').classList.remove('active')">&times;</span>
+            </div>
+            <form id="sa-override-form">
+                <input type="hidden" id="sa-override-id">
+                <div class="modal-body" style="display: flex; flex-direction: column; gap: 12px; padding: 16px 0;">
+                    <!-- Status & Project -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="sa-override-status" style="font-size: 0.78rem; font-weight: 700;">Shift Status</label>
+                            <select id="sa-override-status" required style="padding: 6px 10px; font-size: 0.82rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                                <option value="Completed">Completed (Finalized)</option>
+                                <option value="Approved">Approved (Active)</option>
+                                <option value="Pending Approval">Pending Approval</option>
+                                <option value="Rejected">Rejected</option>
+                                <option value="Cancelled">Cancelled (0.0h)</option>
+                                <option value="Pending Worker Consent">Pending Worker Consent</option>
+                            </select>
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="sa-override-project" style="font-size: 0.78rem; font-weight: 700;">Project</label>
+                            <select id="sa-override-project" required style="padding: 6px 10px; font-size: 0.82rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- Dates and Times -->
+                    <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 12px;">
+                        <div style="font-size: 0.74rem; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px;">
+                            Schedule / Working Times
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="sa-override-date-start" style="font-size: 0.74rem; font-weight: 600;">Start Date</label>
+                                <input type="date" id="sa-override-date-start" required style="padding: 5px 8px; font-size: 0.8rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="sa-override-time-start" style="font-size: 0.74rem; font-weight: 600;">Start Time</label>
+                                <input type="time" id="sa-override-time-start" required style="padding: 5px 8px; font-size: 0.8rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="sa-override-date-end" style="font-size: 0.74rem; font-weight: 600;">End Date</label>
+                                <input type="date" id="sa-override-date-end" required style="padding: 5px 8px; font-size: 0.8rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                            </div>
+                            <div class="form-group" style="margin-bottom: 0;">
+                                <label for="sa-override-time-end" style="font-size: 0.74rem; font-weight: 600;">End Time</label>
+                                <input type="time" id="sa-override-time-end" required style="padding: 5px 8px; font-size: 0.8rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Claimable Duration Override -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="sa-override-duration" style="font-size: 0.78rem; font-weight: 700;">Claimable Hours (Net)</label>
+                            <input type="number" step="0.1" min="0" id="sa-override-duration" required style="padding: 6px 10px; font-size: 0.82rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="sa-override-break" style="font-size: 0.78rem; font-weight: 700;">Rest Break (hrs)</label>
+                            <input type="number" step="0.1" min="0" id="sa-override-break" style="padding: 6px 10px; font-size: 0.82rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                        </div>
+                    </div>
+
+                    <!-- Target Work & Progress -->
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="sa-override-target" style="font-size: 0.78rem; font-weight: 700;">Target Work / Deliverables</label>
+                        <input type="text" id="sa-override-target" style="padding: 6px 10px; font-size: 0.82rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;">
+                    </div>
+
+                    <!-- Remarks / Notes -->
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label for="sa-override-remarks" style="font-size: 0.78rem; font-weight: 700;">Override Remarks / Reason</label>
+                        <textarea id="sa-override-remarks" placeholder="Notes on why this record was overridden..." style="min-height: 50px; padding: 6px 10px; font-size: 0.82rem; background: #fff !important; color: #0f172a !important; border: 1px solid var(--border-color); border-radius: 6px; width: 100%;"></textarea>
+                    </div>
+                </div>
+
+                <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center; padding-top: 14px; border-top: 1px solid var(--border-color); margin-top: 4px;">
+                    <button type="button" class="btn btn-danger btn-sm" id="sa-override-btn-delete" style="display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; font-size: 0.78rem;">
+                        Delete Record
+                    </button>
+                    <div style="display: flex; gap: 8px;">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('superadmin-ot-override-modal').classList.remove('active')">Cancel</button>
+                        <button type="submit" class="btn btn-primary btn-sm" style="background: #4f46e5; font-weight: 600;">Save Override</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <!-- Login Page -->
     <div id="login-screen" class="auth-screen">
         <div class="auth-card glass-panel">

@@ -772,18 +772,46 @@ export function openRequestReviewModal(requestId) {
             </div>
 
             <!-- Action Buttons -->
-            <div class="modal-footer" style="margin-top: 14px; gap: 10px;">
-                <button type="button" class="btn btn-secondary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Cancel</button>
-                <button type="button" class="btn btn-danger" id="rev-btn-reject">Reject Request</button>
-                <button type="button" class="btn btn-success" id="rev-btn-approve">Approve Request</button>
+            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    ${isSuperAdmin ? `
+                        <button type="button" class="btn btn-danger btn-sm" id="rev-btn-sa-delete" style="font-size:0.75rem; padding: 5px 10px;">
+                            Delete Record
+                        </button>
+                    ` : ''}
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    ${isSuperAdmin ? `
+                        <button type="button" class="btn btn-primary btn-sm" id="rev-btn-sa-override" style="font-weight:600; font-size:0.75rem; padding: 5px 12px; background:#4f46e5;">
+                            Override / Edit OT
+                        </button>
+                    ` : ''}
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Cancel</button>
+                    <button type="button" class="btn btn-danger" id="rev-btn-reject">Reject Request</button>
+                    <button type="button" class="btn btn-success" id="rev-btn-approve">Approve Request</button>
+                </div>
             </div>
         `;
     } else {
         const canClose = req.status === 'Approved' && (req.requesterId === currentUser?.id || (currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')));
         contentHtml += `
-            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
-                ${canClose ? `<button type="button" class="btn btn-success" id="rev-btn-close-ot" style="font-weight:700;">Close OT &amp; Submit Actuals</button>` : ''}
-                <button type="button" class="btn btn-primary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Close</button>
+            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
+                <div>
+                    ${isSuperAdmin ? `
+                        <button type="button" class="btn btn-danger btn-sm" id="rev-btn-sa-delete" style="font-size:0.75rem; padding: 5px 10px;">
+                            Delete Record
+                        </button>
+                    ` : ''}
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    ${isSuperAdmin ? `
+                        <button type="button" class="btn btn-primary btn-sm" id="rev-btn-sa-override" style="font-weight:600; font-size:0.75rem; padding: 5px 12px; background:#4f46e5;">
+                            Override / Edit OT
+                        </button>
+                    ` : ''}
+                    ${canClose ? `<button type="button" class="btn btn-success" id="rev-btn-close-ot" style="font-weight:700;">Close OT &amp; Submit Actuals</button>` : ''}
+                    <button type="button" class="btn btn-primary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Close</button>
+                </div>
             </div>
         `;
     }
@@ -799,6 +827,34 @@ export function openRequestReviewModal(requestId) {
                 window.openCloseOTModal(req.id, () => {
                     renderActiveView();
                 });
+            }
+        };
+    }
+
+    const btnSaOverride = document.getElementById('rev-btn-sa-override');
+    if (btnSaOverride) {
+        btnSaOverride.onclick = () => {
+            modal.classList.remove('active');
+            if (window.openSuperadminOTOverrideModal) {
+                window.openSuperadminOTOverrideModal(req.id, () => {
+                    renderActiveView();
+                });
+            }
+        };
+    }
+
+    const btnSaDelete = document.getElementById('rev-btn-sa-delete');
+    if (btnSaDelete) {
+        btnSaDelete.onclick = () => {
+            if (confirm(`Are you sure you want to permanently delete OT record "${req.id}"?\nThis action cannot be undone.`)) {
+                try {
+                    db.deleteRequest(req.id, currentUser.id);
+                    showToast(`OT Record ${req.id} permanently deleted.`, "info");
+                    modal.classList.remove('active');
+                    renderActiveView();
+                } catch (err) {
+                    showToast(err.message || "Failed to delete record.", "error");
+                }
             }
         };
     }
@@ -914,6 +970,172 @@ export function openRequestReviewModal(requestId) {
     }
 }
 window.openRequestReviewModal = openRequestReviewModal;
+
+// 6. Superadmin Direct Record Override Modal
+export function openSuperadminOTOverrideModal(requestId, onDone) {
+    const currentUser = state.currentUser || db.getCurrentUser();
+    if (!currentUser || currentUser.role !== 'superadmin') {
+        showToast("Unauthorized: Only Super Administrators can override overtime records.", "error");
+        return;
+    }
+
+    const req = db.getRequest(requestId);
+    if (!req) {
+        showToast(`Request ${requestId} not found.`, "error");
+        return;
+    }
+
+    const modal = document.getElementById('superadmin-ot-override-modal');
+    if (!modal) return;
+
+    // Fill project options
+    const projectSelect = document.getElementById('sa-override-project');
+    const projects = db.getProjects() || [];
+    projectSelect.innerHTML = projects.map(p => `
+        <option value="${p.id}" ${p.id === req.project ? 'selected' : ''}>${p.name}</option>
+    `).join('');
+    if (!projects.some(p => p.id === req.project)) {
+        projectSelect.innerHTML += `<option value="${req.project}" selected>${req.project}</option>`;
+    }
+
+    // Set form values
+    document.getElementById('sa-override-id').value = req.id;
+    document.getElementById('sa-override-subtitle').innerHTML = `Overtime Record <strong>${req.id}</strong> &bull; Requested by: <strong>${db.getUser(req.requesterId)?.name || req.requesterId}</strong>`;
+    document.getElementById('sa-override-status').value = req.status || 'Completed';
+
+    const cleanTime = (t) => {
+        if (!t) return '18:00';
+        const s = String(t).trim();
+        return s.length >= 5 ? s.slice(0, 5) : s;
+    };
+
+    const ds = req.actualDateStart || req.dateStart || (req.startDate ? req.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
+    const de = req.actualDateEnd || req.dateEnd || (req.endDate ? req.endDate.slice(0, 10) : ds);
+    const ts = cleanTime(req.actualTimeStart || req.timeStart || (req.startDate ? new Date(req.startDate).toTimeString().slice(0, 5) : '18:00'));
+    const te = cleanTime(req.actualTimeEnd || req.timeEnd || (req.endDate ? new Date(req.endDate).toTimeString().slice(0, 5) : '20:00'));
+
+    document.getElementById('sa-override-date-start').value = ds;
+    document.getElementById('sa-override-time-start').value = ts;
+    document.getElementById('sa-override-date-end').value = de;
+    document.getElementById('sa-override-time-end').value = te;
+
+    const dur = req.actualDuration != null ? req.actualDuration : req.duration;
+    document.getElementById('sa-override-duration').value = Number(dur || 0).toFixed(1);
+    document.getElementById('sa-override-break').value = Number(req.actualRestDeduction || 0).toFixed(1);
+    document.getElementById('sa-override-target').value = req.targetWork || '';
+    document.getElementById('sa-override-remarks').value = req.closingRemarks || req.approverRemarks || req.rejectionReason || '';
+
+    // Auto calculate duration on date/time changes
+    const autoCalcHours = () => {
+        const d1 = document.getElementById('sa-override-date-start').value;
+        const t1 = document.getElementById('sa-override-time-start').value;
+        const d2 = document.getElementById('sa-override-date-end').value;
+        const t2 = document.getElementById('sa-override-time-end').value;
+        if (d1 && t1 && d2 && t2) {
+            const startObj = new Date(`${d1}T${t1}:00`);
+            const endObj = new Date(`${d2}T${t2}:00`);
+            if (!isNaN(startObj.getTime()) && !isNaN(endObj.getTime())) {
+                const diffHrs = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
+                if (diffHrs > 0) {
+                    const calc = db.calculateNetOvertime(diffHrs);
+                    document.getElementById('sa-override-duration').value = calc.netHours.toFixed(1);
+                    document.getElementById('sa-override-break').value = calc.restDeducted.toFixed(1);
+                }
+            }
+        }
+    };
+
+    document.getElementById('sa-override-date-start').onchange = autoCalcHours;
+    document.getElementById('sa-override-time-start').onchange = autoCalcHours;
+    document.getElementById('sa-override-date-end').onchange = autoCalcHours;
+    document.getElementById('sa-override-time-end').onchange = autoCalcHours;
+
+    // Delete Button inside Override Modal
+    const btnDelete = document.getElementById('sa-override-btn-delete');
+    btnDelete.onclick = () => {
+        if (confirm(`Are you sure you want to permanently delete OT record "${req.id}"?\nThis action cannot be undone.`)) {
+            try {
+                db.deleteRequest(req.id, currentUser.id);
+                showToast(`OT Record ${req.id} permanently deleted.`, "info");
+                modal.classList.remove('active');
+                if (document.getElementById('review-ot-modal')) {
+                    document.getElementById('review-ot-modal').classList.remove('active');
+                }
+                if (onDone) onDone();
+                else renderActiveView();
+            } catch (err) {
+                showToast(err.message || "Failed to delete record.", "error");
+            }
+        }
+    };
+
+    // Form Submission
+    const form = document.getElementById('sa-override-form');
+    form.onsubmit = (e) => {
+        e.preventDefault();
+        const newStatus = document.getElementById('sa-override-status').value;
+        const newProject = document.getElementById('sa-override-project').value;
+        const newDs = document.getElementById('sa-override-date-start').value;
+        const newTs = document.getElementById('sa-override-time-start').value;
+        const newDe = document.getElementById('sa-override-date-end').value;
+        const newTe = document.getElementById('sa-override-time-end').value;
+        const newDur = Number(document.getElementById('sa-override-duration').value) || 0;
+        const newBreak = Number(document.getElementById('sa-override-break').value) || 0;
+        const newTarget = document.getElementById('sa-override-target').value.trim();
+        const newRemarks = document.getElementById('sa-override-remarks').value.trim();
+
+        const startISO = new Date(`${newDs}T${newTs}:00`).toISOString();
+        const endISO = new Date(`${newDe}T${newTe}:00`).toISOString();
+
+        const overridePayload = {
+            status: newStatus,
+            project: newProject,
+            startDate: startISO,
+            endDate: endISO,
+            dateStart: newDs,
+            dateEnd: newDe,
+            timeStart: newTs,
+            timeEnd: newTe,
+            duration: newDur,
+            targetWork: newTarget,
+            approverRemarks: newRemarks,
+            closingRemarks: newRemarks
+        };
+
+        if (newStatus === 'Completed') {
+            overridePayload.actualStartDate = startISO;
+            overridePayload.actualEndDate = endISO;
+            overridePayload.actualDateStart = newDs;
+            overridePayload.actualDateEnd = newDe;
+            overridePayload.actualTimeStart = newTs;
+            overridePayload.actualTimeEnd = newTe;
+            overridePayload.actualDuration = newDur;
+            overridePayload.actualRestDeduction = newBreak;
+            overridePayload.actualGrossDuration = newDur + newBreak;
+        } else if (newStatus === 'Cancelled') {
+            overridePayload.actualDuration = 0;
+            overridePayload.actualGrossDuration = 0;
+            overridePayload.actualRestDeduction = 0;
+            overridePayload.cancellationReason = newRemarks || 'Cancelled by Superadmin';
+        }
+
+        try {
+            db.overrideRequest(req.id, overridePayload, currentUser.id);
+            showToast(`OT Record ${req.id} overridden successfully.`, "success");
+            modal.classList.remove('active');
+            if (document.getElementById('review-ot-modal')) {
+                document.getElementById('review-ot-modal').classList.remove('active');
+            }
+            if (onDone) onDone();
+            else renderActiveView();
+        } catch (err) {
+            showToast(err.message || "Failed to save override.", "error");
+        }
+    };
+
+    modal.classList.add('active');
+}
+window.openSuperadminOTOverrideModal = openSuperadminOTOverrideModal;
 
 // 6. Responsive navigation helper
 function initResponsiveNav() {

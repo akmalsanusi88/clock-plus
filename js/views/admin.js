@@ -916,6 +916,7 @@ export function renderAdminReport(container) {
     const allRequests = db.getRequests();
     const currentUser = db.getCurrentUser();
     const currentRole = (currentUser?.role || 'worker').toLowerCase().trim();
+    const isSuperAdmin = currentRole === 'superadmin';
     const isGlobalAdmin = currentRole === 'superadmin' || currentRole === 'admin';
     const isManager = currentRole === 'superior' || currentRole === 'manager';
     const isRestrictedToSelf = !isGlobalAdmin && !isManager; // supervisor or worker
@@ -1438,9 +1439,13 @@ export function renderAdminReport(container) {
                         <td>${statusBadge}</td>
                         <td style="text-align: right; white-space: nowrap;">
                             ${r.status === 'Approved' ? `
-                                <button class="btn btn-success btn-sm rep-close-ot-btn" data-id="${r.id}" style="padding: 2px 7px; font-size: 0.72rem; font-weight: 700; margin-right: 4px;">Close OT</button>
+                                <button class="btn btn-success btn-sm rep-close-ot-btn" data-id="${r.id}" style="padding: 2px 7px; font-size: 0.72rem; font-weight: 700; margin-right: 3px;">Close OT</button>
                             ` : ''}
                             <button class="btn btn-secondary btn-sm rep-view-details-btn" data-id="${r.id}" style="padding: 3px 8px; font-size: 0.72rem;">View Details</button>
+                            ${isSuperAdmin ? `
+                                <button class="btn btn-primary btn-sm rep-edit-override-btn" data-id="${r.id}" title="Superadmin Override" style="padding: 2px 7px; font-size: 0.72rem; margin-left: 3px; background: #4f46e5; border-color: #4338ca;">Edit</button>
+                                <button class="btn btn-danger btn-sm rep-delete-ot-btn" data-id="${r.id}" title="Superadmin Delete" style="padding: 2px 7px; font-size: 0.72rem; margin-left: 3px; background: #dc2626;">Delete</button>
+                            ` : ''}
                         </td>
                     </tr>
                     <tr class="rep-sub-row" id="subrow-${r.id}" style="display: none; background: #f8fafc;">
@@ -1519,6 +1524,26 @@ export function renderAdminReport(container) {
 
         reportRows.querySelectorAll('.rep-main-row').forEach(row => {
             row.onclick = (e) => {
+                if (e.target.closest('.rep-edit-override-btn')) {
+                    const reqId = e.target.closest('.rep-edit-override-btn').dataset.id;
+                    if (reqId && window.openSuperadminOTOverrideModal) {
+                        window.openSuperadminOTOverrideModal(reqId, () => loadReport());
+                    }
+                    return;
+                }
+                if (e.target.closest('.rep-delete-ot-btn')) {
+                    const reqId = e.target.closest('.rep-delete-ot-btn').dataset.id;
+                    if (reqId && confirm(`Are you sure you want to permanently delete OT record "${reqId}"?\nThis action cannot be undone.`)) {
+                        try {
+                            db.deleteRequest(reqId, currentUserId);
+                            showToast(`OT Record ${reqId} deleted successfully.`, "info");
+                            loadReport();
+                        } catch (err) {
+                            showToast(err.message || "Failed to delete record.", "error");
+                        }
+                    }
+                    return;
+                }
                 if (e.target.closest('.rep-view-details-btn')) {
                     const reqId = row.dataset.id;
                     if (reqId && window.openRequestReviewModal) {
@@ -1550,6 +1575,32 @@ export function renderAdminReport(container) {
                 const reqId = btn.dataset.id;
                 if (reqId && window.openRequestReviewModal) {
                     window.openRequestReviewModal(reqId);
+                }
+            };
+        });
+
+        reportRows.querySelectorAll('.rep-edit-override-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const reqId = btn.dataset.id;
+                if (reqId && window.openSuperadminOTOverrideModal) {
+                    window.openSuperadminOTOverrideModal(reqId, () => loadReport());
+                }
+            };
+        });
+
+        reportRows.querySelectorAll('.rep-delete-ot-btn').forEach(btn => {
+            btn.onclick = (e) => {
+                e.stopPropagation();
+                const reqId = btn.dataset.id;
+                if (reqId && confirm(`Are you sure you want to permanently delete OT record "${reqId}"?\nThis action cannot be undone.`)) {
+                    try {
+                        db.deleteRequest(reqId, currentUserId);
+                        showToast(`OT Record ${reqId} deleted successfully.`, "info");
+                        loadReport();
+                    } catch (err) {
+                        showToast(err.message || "Failed to delete record.", "error");
+                    }
                 }
             };
         });
@@ -2526,6 +2577,10 @@ export function renderAdminSettings(container) {
                 document.getElementById('edit-perm-report').checked = allowed.includes('report');
                 document.getElementById('edit-perm-settings').checked = allowed.includes('settings');
 
+                if (btnModalDeleteUser) {
+                    btnModalDeleteUser.style.display = isSuperAdmin ? 'inline-flex' : 'none';
+                }
+
                 editUserModal.classList.add('active');
             };
         });
@@ -2607,18 +2662,26 @@ export function renderAdminSettings(container) {
         }
     };
 
-    // Delete User from Modal
+    // Delete User from Modal (Superadmin Exclusive)
     btnModalDeleteUser.onclick = () => {
+        if (!isSuperAdmin) {
+            showToast("Unauthorized: Only Super Administrators have the authority to delete user accounts.", "error");
+            return;
+        }
         const uid = editUserIdInput.value;
         const u = db.getUser(uid);
         const displayName = u ? (u.name || u.email) : uid;
 
-        if (confirm(`Are you sure you want to remove user ${displayName}?`)) {
-            db.deleteUser(uid);
-            showToast("User removed successfully.", "info");
-            editUserModal.classList.remove('active');
-            loadUsers();
-            loadHierarchy();
+        if (confirm(`Are you sure you want to permanently remove user account "${displayName}"?\nThis action cannot be undone.`)) {
+            try {
+                db.deleteUser(uid);
+                showToast(`User ${displayName} removed successfully.`, "info");
+                editUserModal.classList.remove('active');
+                loadUsers();
+                loadHierarchy();
+            } catch (err) {
+                showToast(err.message || "Failed to remove user.", "error");
+            }
         }
     };
 
