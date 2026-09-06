@@ -293,6 +293,7 @@ class Database {
             if (sbLimits && sbLimits.length > 0) {
                 mappedLimits = sbLimits.map(l => ({
                     id: l.id,
+                    companyId: l.company_id || null,
                     scope: l.scope,
                     targetId: l.target_id,
                     monthlyMax: l.monthly_max || 104,
@@ -301,7 +302,7 @@ class Database {
                     restDeductHours: l.rest_deduct_hours !== undefined ? Number(l.rest_deduct_hours) : undefined
                 }));
 
-                const sbGlobal = mappedLimits.find(l => l.scope === 'global');
+                const sbGlobal = mappedLimits.find(l => l.scope === 'global' && (!l.companyId || !activeCompanyId || l.companyId === activeCompanyId));
                 if (sbGlobal && sbGlobal.restThresholdHours !== undefined && !isNaN(sbGlobal.restThresholdHours)) {
                     localStorage.setItem('clock_plus_rest_deduction_rule', JSON.stringify({
                         enabled: sbGlobal.restDeductionEnabled !== false,
@@ -314,8 +315,13 @@ class Database {
             let mappedHierarchy = this.data.hierarchy || [];
             if (sbHierarchy && sbHierarchy.length > 0) {
                 mappedHierarchy = sbHierarchy.map(h => ({
+                    companyId: h.company_id || null,
                     workerId: h.worker_id,
-                    approverId: h.approver_id
+                    approverId: h.approver_id,
+                    level1: h.approver_id || null,
+                    level2: h.level2_id || null,
+                    level3: h.level3_id || null,
+                    approverIds: [h.approver_id, h.level2_id, h.level3_id].filter(Boolean)
                 }));
             }
 
@@ -356,6 +362,7 @@ class Database {
 
             const mappedNotifications = (sbNotifications || []).map(n => ({
                 id: n.id,
+                companyId: n.company_id || null,
                 userId: n.user_id,
                 message: n.message,
                 timestamp: n.timestamp,
@@ -386,11 +393,13 @@ class Database {
                     approverIds.forEach(appId => {
                         const hasNotif = mappedNotifications.some(n => 
                             (n.userId === appId || (n.userId && appId && (n.userId.startsWith(appId) || appId.startsWith(n.userId)))) && 
+                            (!n.companyId || !r.companyId || n.companyId === r.companyId) &&
                             n.message && n.message.includes(r.id)
                         );
                         if (!hasNotif) {
                             const newNotif = {
                                 id: `NT-${Math.floor(100000 + Math.random() * 900000)}`,
+                                companyId: r.companyId || activeCompanyId || 'COMP-101',
                                 userId: appId,
                                 message: `Worker ${reqName} submitted a new OT request (${r.id}) for project ${projName}.`,
                                 timestamp: r.startDate || new Date().toISOString(),
@@ -399,7 +408,7 @@ class Database {
                             mappedNotifications.unshift(newNotif);
                             supabase.from('notifications').upsert({
                                 id: newNotif.id,
-                                company_id: activeCompanyId || 'COMP-101',
+                                company_id: newNotif.companyId,
                                 user_id: newNotif.userId,
                                 message: newNotif.message,
                                 timestamp: newNotif.timestamp
@@ -1189,7 +1198,10 @@ class Database {
 
     // --- Hierarchy ---
     getHierarchy() {
-        return this.getData().hierarchy || [];
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+        const all = this.getData().hierarchy || [];
+        if (!activeCompanyId) return all;
+        return all.filter(h => !h.companyId || h.companyId === activeCompanyId);
     }
 
     getApproversForWorker(workerId) {
@@ -1304,10 +1316,12 @@ class Database {
     async updateHierarchyMapping(workerId, level1Id, level2Id = null, level3Id = null) {
         const data = this.getData();
         if (!data.hierarchy) data.hierarchy = [];
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
 
         const approverIds = [level1Id, level2Id, level3Id].filter(Boolean);
-        const index = data.hierarchy.findIndex(h => h.workerId === workerId);
+        const index = data.hierarchy.findIndex(h => h.workerId === workerId && (!h.companyId || !activeCompanyId || h.companyId === activeCompanyId));
         const record = {
+            companyId: activeCompanyId || null,
             workerId,
             approverId: level1Id || null,
             level1: level1Id || null,
@@ -1324,10 +1338,21 @@ class Database {
         this.saveData(data);
 
         try {
-            await supabase.from('hierarchy').upsert({
+            const payload = {
+                company_id: activeCompanyId || null,
                 worker_id: workerId,
-                approver_id: level1Id || ''
-            });
+                approver_id: level1Id || '',
+                level2_id: level2Id || null,
+                level3_id: level3Id || null
+            };
+            const { error: hierErr } = await supabase.from('hierarchy').upsert(payload);
+            if (hierErr) {
+                // Fallback for older schema without company_id / level2_id columns
+                await supabase.from('hierarchy').upsert({
+                    worker_id: workerId,
+                    approver_id: level1Id || ''
+                });
+            }
         } catch (e) {
             console.error("Error upserting hierarchy in Supabase:", e);
         }
@@ -1335,7 +1360,10 @@ class Database {
 
     // --- Limits ---
     getLimits() {
-        return this.getData().limits;
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+        const list = this.getData().limits || [];
+        if (!activeCompanyId) return list;
+        return list.filter(l => !l.companyId || l.companyId === activeCompanyId);
     }
 
     getWorkerLimits(workerId) {
@@ -1401,7 +1429,14 @@ class Database {
 
     async saveLimit(limit) {
         const data = this.getData();
-        const index = data.limits.findIndex(l => l.scope === limit.scope && l.targetId === limit.targetId);
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+        limit.companyId = limit.companyId || activeCompanyId || null;
+
+        const index = data.limits.findIndex(l => 
+            (!l.companyId || !activeCompanyId || l.companyId === activeCompanyId) &&
+            l.scope === limit.scope && 
+            l.targetId === limit.targetId
+        );
         if (index !== -1) {
             data.limits[index] = { ...data.limits[index], ...limit };
         } else {
@@ -1418,7 +1453,10 @@ class Database {
         }
 
         try {
-            const query = supabase.from('limits').delete().eq('scope', limit.scope);
+            let query = supabase.from('limits').delete().eq('scope', limit.scope);
+            if (activeCompanyId) {
+                query = query.eq('company_id', activeCompanyId);
+            }
             if (limit.targetId) {
                 await query.eq('target_id', limit.targetId);
             } else {
@@ -1426,6 +1464,7 @@ class Database {
             }
 
             const insertPayload = {
+                company_id: activeCompanyId || null,
                 scope: limit.scope,
                 target_id: limit.targetId,
                 monthly_max: limit.monthlyMax || 104
@@ -1438,7 +1477,7 @@ class Database {
 
             const { error: insErr } = await supabase.from('limits').insert(insertPayload);
             if (insErr) {
-                // If columns don't exist yet in Supabase schema, fallback gracefully
+                // If company_id or rest deduction columns don't exist yet in Supabase schema, fallback gracefully
                 if (insErr.message && (insErr.message.includes('column') || insErr.code === '42703')) {
                     await supabase.from('limits').insert({
                         scope: limit.scope,
@@ -2161,7 +2200,10 @@ class Database {
     getNotifications(userId) {
         this.cleanupExpiredNotifications();
         if (!userId) return [];
-        return (this.getData().notifications || []).filter(n => this._isUserMatch(n.userId, userId));
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+        return (this.getData().notifications || []).filter(n => 
+            this._isUserMatch(n.userId, userId) && (!n.companyId || !activeCompanyId || n.companyId === activeCompanyId)
+        );
     }
 
     getUnreadNotificationsCount(userId) {
@@ -2174,6 +2216,7 @@ class Database {
         const newId = `NT-${Math.floor(100000 + Math.random() * 900000)}`;
         const newNotif = {
             id: newId,
+            companyId: activeCompanyId,
             userId,
             message,
             timestamp: new Date().toISOString(),
@@ -2212,13 +2255,22 @@ class Database {
     clearAllNotifications(userId) {
         const data = this.getData();
         if (!data.notifications) return;
-        data.notifications = data.notifications.filter(n => !this._isUserMatch(n.userId, userId));
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
+        data.notifications = data.notifications.filter(n => {
+            const matchesUser = this._isUserMatch(n.userId, userId);
+            const matchesCompany = !n.companyId || !activeCompanyId || n.companyId === activeCompanyId;
+            return !(matchesUser && matchesCompany);
+        });
         this.saveData(data);
 
         const u = this.getUser(userId);
         const idsToClear = [userId, u?.id, u?.email].filter(Boolean);
         for (const uid of idsToClear) {
-            supabase.from('notifications').delete().eq('user_id', uid).then(({ error }) => {
+            let query = supabase.from('notifications').delete().eq('user_id', uid);
+            if (activeCompanyId) {
+                query = query.eq('company_id', activeCompanyId);
+            }
+            query.then(({ error }) => {
                 if (error) console.error("Error clearing notifications from Supabase:", error);
             });
         }
@@ -2226,17 +2278,22 @@ class Database {
 
     markNotificationsAsRead(userId) {
         const data = this.getData();
+        const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
         if (data.notifications) {
             data.notifications.forEach(n => {
-                if (this._isUserMatch(n.userId, userId)) n.read = true;
+                if (this._isUserMatch(n.userId, userId) && (!n.companyId || !activeCompanyId || n.companyId === activeCompanyId)) {
+                    n.read = true;
+                }
             });
             this.saveData(data);
         }
 
         // Send update if read column exists
-        supabase.from('notifications').update({
-            read: true
-        }).eq('user_id', userId).then(({ error }) => {
+        let query = supabase.from('notifications').update({ read: true }).eq('user_id', userId);
+        if (activeCompanyId) {
+            query = query.eq('company_id', activeCompanyId);
+        }
+        query.then(({ error }) => {
             // Silently handled if read column is omitted in schema
         });
     }
