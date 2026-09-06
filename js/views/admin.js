@@ -516,11 +516,31 @@ export function renderAdminDashboard(container) {
 // 2. ADMIN REQUEST (Create & Assign Overtime)
 // =========================================================================
 export function renderAdminRequest(container) {
-    const users = db.getUsers();
+    const allUsers = db.getUsers();
     const projects = db.getProjects();
     const currentUser = db.getCurrentUser();
     const currentUserId = currentUser ? currentUser.id : null;
     const currentEmail = currentUser ? currentUser.email : null;
+
+    // Role priority levels: Superadmin (1), Admin (2), Superior (3), Supervisor (4), Worker (5)
+    const ROLE_HIERARCHY_LEVEL = {
+        superadmin: 1,
+        admin: 2,
+        superior: 3,
+        supervisor: 4,
+        worker: 5
+    };
+    const myLevel = ROLE_HIERARCHY_LEVEL[currentUser?.role] || 5;
+
+    // Users can only view their own role level or below (e.g. Workers only see Workers)
+    const users = allUsers.filter(u => {
+        // Always include the current user themselves
+        if (currentUserId && (u.id === currentUserId || (currentEmail && u.email && u.email.toLowerCase() === currentEmail.toLowerCase()))) {
+            return true;
+        }
+        const userLevel = ROLE_HIERARCHY_LEVEL[u.role] || 5;
+        return userLevel >= myLevel;
+    });
 
     container.innerHTML = `
         <div style="max-width: 860px; margin: 0 auto;">
