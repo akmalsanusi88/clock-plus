@@ -1136,10 +1136,12 @@ class Database {
             }
         }
 
-        // 2. SMTP Dispatch (Attempt Edge Function relay or provide simulated delivery log)
+        // 2. SMTP Dispatch via Serverless Endpoint
         try {
-            const { data, error } = await supabase.functions.invoke('send-client-email', {
-                body: {
+            const res = await fetch('/api/send-email', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     companyId: activeCompanyId,
                     settings: {
                         smtp_host: settings.smtp_host,
@@ -1154,29 +1156,30 @@ class Database {
                     cc: ccList,
                     subject,
                     html: htmlBody
-                }
+                })
             });
 
-            if (!error && data?.success) {
-                return { success: true, message: `Email sent via SMTP to ${recipients.join(', ')}` };
+            if (res.ok) {
+                const data = await res.json();
+                if (data && data.success) {
+                    return { success: true, message: data.message || `Email delivered to ${recipients.join(', ')}` };
+                }
+                throw new Error(data?.error || data?.message || "Email delivery failed.");
+            } else {
+                let errMsg;
+                try {
+                    const errData = await res.json();
+                    errMsg = errData.error || errData.message;
+                } catch {
+                    errMsg = `Server returned status ${res.status}`;
+                }
+                throw new Error(errMsg);
             }
-        } catch (edgeErr) {
-            // Relay not deployed
+        } catch (apiErr) {
+            console.error("[Email Notification] SMTP endpoint error:", apiErr);
+            if (isTest) throw apiErr;
+            return { success: false, message: apiErr.message };
         }
-
-        // Local development / simulated dispatch notification
-        console.info(`[Email Dispatcher - SMTP Mode]
-• From: ${senderName} <${senderEmail}>
-• To: ${recipients.join(', ')}
-• CC: ${ccList.join(', ') || 'None'}
-• Host: ${settings.smtp_host || 'Not set'}:${settings.smtp_port || 587}
-• Subject: ${subject}`);
-
-        return {
-            success: true,
-            simulated: true,
-            message: `Email queued for ${recipients.join(', ')} (SMTP: ${settings.smtp_host || 'Configured'})`
-        };
     }
 
     // --- Hierarchy ---
