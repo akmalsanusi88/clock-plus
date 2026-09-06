@@ -32,7 +32,7 @@ export function getStartOfMonth(date) {
     return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
-// Helper to flexibly match user by email, id, username or interchangeable Malay honorifics (mohd <-> muhd)
+// Helper to match user strictly by exact recorded email, ID, or name
 export function matchesUserIdentifier(userOrCu, input) {
     if (!userOrCu || !input) return false;
     const cleanInput = String(input).toLowerCase().trim();
@@ -42,41 +42,7 @@ export function matchesUserIdentifier(userOrCu, input) {
     const id = (userOrCu.userId || userOrCu.id || '').toLowerCase().trim();
     const name = (userOrCu.name || '').toLowerCase().trim();
 
-    // 1. Direct exact match
-    if (email === cleanInput || id === cleanInput || name === cleanInput) return true;
-
-    // 2. Username part match before @ (e.g. "mohdkhairul390" matches "mohdkhairul390@gmail.com")
-    const inputUserPart = cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput;
-    const emailUserPart = email.includes('@') ? email.split('@')[0] : email;
-    if (inputUserPart && emailUserPart && inputUserPart === emailUserPart) return true;
-
-    // 3. Interchangeable Malay name/email prefixes (mohd <-> muhd <-> muhammad <-> md)
-    const normalizeHonorific = (str) => {
-        if (!str) return '';
-        return str
-            .replace(/^muhd(\b|\d|[._-])/, 'mohd$1')
-            .replace(/^muhd/, 'mohd')
-            .replace(/^muhammad(\b|\d|[._-])/, 'mohd$1')
-            .replace(/^muhammad/, 'mohd')
-            .replace(/^md(\b|\d|[._-])/, 'mohd$1');
-    };
-
-    const normInput = normalizeHonorific(cleanInput);
-    const normEmail = normalizeHonorific(email);
-    if (normInput && normEmail && normInput === normEmail) return true;
-
-    const normInputUser = normalizeHonorific(inputUserPart);
-    const normEmailUser = normalizeHonorific(emailUserPart);
-    if (normInputUser && normEmailUser && normInputUser === normEmailUser) return true;
-
-    // 4. Substring in user name if input is at least 4 chars long
-    if (cleanInput.length >= 4 && name && name.includes(cleanInput)) return true;
-
-    // 5. Normalized name match
-    const normName = normalizeHonorific(name);
-    if (cleanInput.length >= 4 && normName && normName.includes(normInput)) return true;
-
-    return false;
+    return email === cleanInput || id === cleanInput || name === cleanInput;
 }
 
 // Default initial data if database doesn't exist
