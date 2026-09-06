@@ -32,6 +32,53 @@ export function getStartOfMonth(date) {
     return new Date(d.getFullYear(), d.getMonth(), 1);
 }
 
+// Helper to flexibly match user by email, id, username or interchangeable Malay honorifics (mohd <-> muhd)
+export function matchesUserIdentifier(userOrCu, input) {
+    if (!userOrCu || !input) return false;
+    const cleanInput = String(input).toLowerCase().trim();
+    if (!cleanInput) return false;
+
+    const email = (userOrCu.email || '').toLowerCase().trim();
+    const id = (userOrCu.userId || userOrCu.id || '').toLowerCase().trim();
+    const name = (userOrCu.name || '').toLowerCase().trim();
+
+    // 1. Direct exact match
+    if (email === cleanInput || id === cleanInput || name === cleanInput) return true;
+
+    // 2. Username part match before @ (e.g. "mohdkhairul390" matches "mohdkhairul390@gmail.com")
+    const inputUserPart = cleanInput.includes('@') ? cleanInput.split('@')[0] : cleanInput;
+    const emailUserPart = email.includes('@') ? email.split('@')[0] : email;
+    if (inputUserPart && emailUserPart && inputUserPart === emailUserPart) return true;
+
+    // 3. Interchangeable Malay name/email prefixes (mohd <-> muhd <-> muhammad <-> md)
+    const normalizeHonorific = (str) => {
+        if (!str) return '';
+        return str
+            .replace(/^muhd(\b|\d|[._-])/, 'mohd$1')
+            .replace(/^muhd/, 'mohd')
+            .replace(/^muhammad(\b|\d|[._-])/, 'mohd$1')
+            .replace(/^muhammad/, 'mohd')
+            .replace(/^md(\b|\d|[._-])/, 'mohd$1');
+    };
+
+    const normInput = normalizeHonorific(cleanInput);
+    const normEmail = normalizeHonorific(email);
+    if (normInput && normEmail && normInput === normEmail) return true;
+
+    const normInputUser = normalizeHonorific(inputUserPart);
+    const normEmailUser = normalizeHonorific(emailUserPart);
+    if (normInputUser && normEmailUser && normInputUser === normEmailUser) return true;
+
+    // 4. Substring in user name if input is at least 4 chars long
+    if (cleanInput.length >= 4 && name && name.includes(cleanInput)) return true;
+
+    // 5. Normalized name match
+    const normName = normalizeHonorific(name);
+    if (cleanInput.length >= 4 && normName && normName.includes(normInput)) return true;
+
+    return false;
+}
+
 // Default initial data if database doesn't exist
 const initialData = {
     users: [
@@ -481,15 +528,26 @@ class Database {
         
         let cu = null;
         if (activeCompanyId) {
-            cu = companyUsers.find(m => m.companyId === activeCompanyId && (m.userId === id || (m.userId && (id.startsWith(m.userId) || m.userId.startsWith(id)))));
+            cu = companyUsers.find(m => m.companyId === activeCompanyId && matchesUserIdentifier(m, id));
         }
         if (!cu) {
-            cu = companyUsers.find(m => m.userId === id || (m.userId && (id.startsWith(m.userId) || m.userId.startsWith(id))));
+            cu = companyUsers.find(m => matchesUserIdentifier(m, id));
         }
 
         if (cu) {
             const rawRole = (cu.role || '').toLowerCase().trim();
-            const normalizedRole = (rawRole === 'admin') ? 'admin' : ((rawRole === 'superior') ? 'superior' : 'worker');
+            let normalizedRole = 'worker';
+            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+            else if (rawRole === 'admin') normalizedRole = 'admin';
+            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+            else normalizedRole = 'worker';
+
+            const dataScope = cu.data_scope || cu.dataScope || (
+                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                (normalizedRole === 'superior' ? 'team' : 'own')
+            );
+
             const hasCustomName = cu.name && cu.name.trim() !== '' && cu.name.toUpperCase() !== 'EMPTY' && cu.name !== 'User';
             return {
                 id: cu.userId,
@@ -498,17 +556,33 @@ class Database {
                 position: cu.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
                 email: cu.email || '',
                 password: cu.password || 'password123',
-                permissions: cu.permissions
+                permissions: cu.permissions,
+                data_scope: dataScope,
+                dataScope: dataScope
             };
         }
 
-        const globalUser = (this.getData().users || []).find(u => u.id === id || id.startsWith(u.id) || u.id.startsWith(id));
+        const globalUser = (this.getData().users || []).find(u => matchesUserIdentifier(u, id));
         if (globalUser) {
             const rawRole = (globalUser.role || '').toLowerCase().trim();
+            let normalizedRole = 'worker';
+            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+            else if (rawRole === 'admin') normalizedRole = 'admin';
+            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+            else normalizedRole = 'worker';
+
+            const dataScope = globalUser.data_scope || globalUser.dataScope || (
+                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                (normalizedRole === 'superior' ? 'team' : 'own')
+            );
+
             return {
                 ...globalUser,
                 name: globalUser.name || globalUser.email || 'User',
-                role: (rawRole === 'admin') ? 'admin' : ((rawRole === 'superior') ? 'superior' : 'worker')
+                role: normalizedRole,
+                data_scope: dataScope,
+                dataScope: dataScope
             };
         }
 
@@ -521,13 +595,9 @@ class Database {
         // 1. Sync latest users from Supabase
         await this.syncFromSupabase();
 
-        // 2. Search company_users and global users
+        // 2. Search company_users and global users with flexible smart matcher (handles email, userId, username, and mohd <-> muhd)
         const companyUsers = this.getData().company_users || [];
-        const match = companyUsers.find(cu => 
-            (cu.email && cu.email.toLowerCase() === normalizedInput) ||
-            (cu.userId && cu.userId.toLowerCase() === normalizedInput) ||
-            (cu.name && cu.name.toLowerCase() === normalizedInput)
-        );
+        const match = companyUsers.find(cu => matchesUserIdentifier(cu, normalizedInput));
 
         // Try Supabase Auth in parallel
         try {
@@ -542,34 +612,57 @@ class Database {
         if (match) {
             const hasCustomName = match.name && match.name.trim() !== '' && match.name.toUpperCase() !== 'EMPTY' && match.name !== 'User';
             const rawRole = (match.role || '').toLowerCase().trim();
-            const normalizedRole = (rawRole === 'admin') ? 'admin' : ((rawRole === 'superior') ? 'superior' : 'worker');
+            let normalizedRole = 'worker';
+            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+            else if (rawRole === 'admin') normalizedRole = 'admin';
+            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+            else normalizedRole = 'worker';
+
+            const dataScope = match.data_scope || match.dataScope || (
+                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                (normalizedRole === 'superior' ? 'team' : 'own')
+            );
 
             return {
                 id: match.userId,
                 name: hasCustomName ? match.name : (match.email || 'User'),
                 role: normalizedRole,
                 position: match.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
-                email: match.email || normalizedInput
+                email: match.email || normalizedInput,
+                data_scope: dataScope,
+                dataScope: dataScope,
+                permissions: match.permissions
             };
         }
 
         // 3. Check global users
         const globalUsers = this.getData().users || [];
-        const globalMatch = globalUsers.find(u => 
-            (u.email && u.email.toLowerCase() === normalizedInput) ||
-            (u.id && u.id.toLowerCase() === normalizedInput) ||
-            (u.name && u.name.toLowerCase() === normalizedInput)
-        );
+        const globalMatch = globalUsers.find(u => matchesUserIdentifier(u, normalizedInput));
 
         if (globalMatch) {
             const rawRole = (globalMatch.role || '').toLowerCase().trim();
-            const normalizedRole = (rawRole === 'admin') ? 'admin' : ((rawRole === 'superior') ? 'superior' : 'worker');
+            let normalizedRole = 'worker';
+            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+            else if (rawRole === 'admin') normalizedRole = 'admin';
+            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+            else normalizedRole = 'worker';
+
+            const dataScope = globalMatch.data_scope || globalMatch.dataScope || (
+                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                (normalizedRole === 'superior' ? 'team' : 'own')
+            );
+
             return {
                 id: globalMatch.id,
                 name: globalMatch.name || globalMatch.email || 'User',
                 role: normalizedRole,
                 position: globalMatch.position || 'Staff',
-                email: globalMatch.email || normalizedInput
+                email: globalMatch.email || normalizedInput,
+                data_scope: dataScope,
+                dataScope: dataScope,
+                permissions: globalMatch.permissions
             };
         }
 
@@ -602,21 +695,33 @@ class Database {
             await this.syncFromSupabase();
 
             const companyUsers = this.getData().company_users || [];
-            const match = companyUsers.find(cu => 
-                cu.userId === authUser.id || 
-                (cu.userId && (authUser.id.startsWith(cu.userId) || cu.userId.startsWith(authUser.id))) ||
-                (cu.email && cu.email.toLowerCase() === authUser.email.toLowerCase())
-            );
+            const match = companyUsers.find(cu => matchesUserIdentifier(cu, authUser.id) || matchesUserIdentifier(cu, authUser.email));
 
             if (!match) return null;
 
             const hasCustomName = match.name && match.name.trim() !== '' && match.name.toUpperCase() !== 'EMPTY' && match.name !== 'User';
+            const rawRole = (match.role || '').toLowerCase().trim();
+            let normalizedRole = 'worker';
+            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+            else if (rawRole === 'admin') normalizedRole = 'admin';
+            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+            else normalizedRole = 'worker';
+
+            const dataScope = match.data_scope || match.dataScope || (
+                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                (normalizedRole === 'superior' ? 'team' : 'own')
+            );
+
             return {
                 id: authUser.id,
                 name: hasCustomName ? match.name : (authUser.email || 'User'),
-                role: (match.role && match.role.toLowerCase() === 'admin') ? 'admin' : (match.role && match.role.toLowerCase() === 'superior' ? 'superior' : 'worker'),
-                position: match.position || 'Staff',
-                email: authUser.email
+                role: normalizedRole,
+                position: match.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
+                email: authUser.email,
+                data_scope: dataScope,
+                dataScope: dataScope,
+                permissions: match.permissions
             };
         } catch (e) {
             return null;
