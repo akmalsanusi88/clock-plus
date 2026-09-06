@@ -458,9 +458,28 @@ class Database {
         const activeCompanyId = localStorage.getItem('clock_plus_session_company_id');
         const companyUsers = this.getData().company_users || [];
         
+        const ROLE_PRIORITY = {
+            superadmin: 1,
+            admin: 2,
+            superior: 3,
+            supervisor: 4,
+            worker: 5
+        };
+
+        const sortUsersByRoleAndName = (arr) => {
+            return arr.sort((a, b) => {
+                const rankA = ROLE_PRIORITY[a.role] || 99;
+                const rankB = ROLE_PRIORITY[b.role] || 99;
+                if (rankA !== rankB) return rankA - rankB;
+                const nameA = (a.name || a.email || '').trim();
+                const nameB = (b.name || b.email || '').trim();
+                return nameA.localeCompare(nameB, undefined, { sensitivity: 'base' });
+            });
+        };
+
         if (!activeCompanyId) {
             const rawUsers = this.getData().users || [];
-            return [...rawUsers].map(u => {
+            const mapped = rawUsers.map(u => {
                 const rawRole = (u.role || '').toLowerCase().trim();
                 let normalizedRole = 'worker';
                 if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
@@ -480,7 +499,8 @@ class Database {
                     data_scope: dataScope,
                     dataScope: dataScope
                 };
-            }).sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || '', undefined, { sensitivity: 'base' }));
+            });
+            return sortUsersByRoleAndName(mapped);
         }
 
         const activeCompanyUsers = companyUsers.filter(cu => cu.companyId === activeCompanyId);
@@ -517,7 +537,7 @@ class Database {
             };
         });
 
-        return list.sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || '', undefined, { sensitivity: 'base' }));
+        return sortUsersByRoleAndName(list);
     }
 
     getAllUsers() {
