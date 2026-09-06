@@ -460,22 +460,60 @@ class Database {
         
         if (!activeCompanyId) {
             const rawUsers = this.getData().users || [];
-            return [...rawUsers].sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || '', undefined, { sensitivity: 'base' }));
+            return [...rawUsers].map(u => {
+                const rawRole = (u.role || '').toLowerCase().trim();
+                let normalizedRole = 'worker';
+                if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+                else if (rawRole === 'admin') normalizedRole = 'admin';
+                else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+                else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+                else normalizedRole = 'worker';
+
+                const dataScope = u.data_scope || u.dataScope || (
+                    normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                    (normalizedRole === 'superior' ? 'team' : 'own')
+                );
+
+                return {
+                    ...u,
+                    role: normalizedRole,
+                    data_scope: dataScope,
+                    dataScope: dataScope
+                };
+            }).sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || '', undefined, { sensitivity: 'base' }));
         }
 
         const activeCompanyUsers = companyUsers.filter(cu => cu.companyId === activeCompanyId);
         const list = activeCompanyUsers.map(cu => {
             const rawRole = (cu.role || '').toLowerCase().trim();
-            const normalizedRole = (rawRole === 'admin') ? 'admin' : ((rawRole === 'superior') ? 'superior' : 'worker');
+            let normalizedRole = 'worker';
+            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+            else if (rawRole === 'admin') normalizedRole = 'admin';
+            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+            else normalizedRole = 'worker';
+
+            const dataScope = cu.data_scope || cu.dataScope || (
+                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                (normalizedRole === 'superior' ? 'team' : 'own')
+            );
+
             const hasCustomName = cu.name && cu.name.trim() !== '' && cu.name.toUpperCase() !== 'EMPTY' && cu.name !== 'User';
+            const defaultPosition = normalizedRole === 'superadmin' ? 'Super Administrator' :
+                (normalizedRole === 'admin' ? 'Administrator' :
+                (normalizedRole === 'superior' ? 'Project Manager' :
+                (normalizedRole === 'supervisor' ? 'Site Supervisor' : 'Staff')));
+
             return {
                 id: cu.userId,
                 name: hasCustomName ? cu.name : (cu.email || 'User'),
                 role: normalizedRole,
-                position: cu.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
+                position: cu.position || defaultPosition,
                 email: cu.email || '',
                 password: cu.password || 'password123',
-                permissions: cu.permissions
+                permissions: cu.permissions,
+                data_scope: dataScope,
+                dataScope: dataScope
             };
         });
 
@@ -483,8 +521,7 @@ class Database {
     }
 
     getAllUsers() {
-        const list = this.getData().users || [];
-        return [...list].sort((a, b) => (a.name || a.email || '').localeCompare(b.name || b.email || '', undefined, { sensitivity: 'base' }));
+        return this.getUsers();
     }
 
     getUser(id) {
