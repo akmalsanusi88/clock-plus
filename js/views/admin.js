@@ -2194,7 +2194,7 @@ export function renderAdminSettings(container) {
 
         <!-- TAB 3: Overtime Limit Thresholds & Rest Deductions -->
         <div id="tab-limits" class="settings-tab-pane" style="display: none;">
-            <div class="card glass-panel" style="max-width: 680px;">
+            <div class="card glass-panel" style="max-width: 680px; margin: 0 auto;">
                 <div class="card-header" style="margin-bottom: 12px;">
                     <h2 class="card-title">${icons.limits} Compliance Hour Thresholds & Rest Deductions</h2>
                 </div>
@@ -2270,7 +2270,7 @@ export function renderAdminSettings(container) {
         ${isSuperAdmin ? `
         <!-- TAB 4: Company Email Settings (Super Admin Only) -->
         <div id="tab-email-settings" class="settings-tab-pane" style="display: none;">
-            <div class="card glass-panel" style="max-width: 780px;">
+            <div class="card glass-panel" style="max-width: 780px; margin: 0 auto;">
                 <div class="card-header" style="margin-bottom: 14px;">
                     <div>
                         <h2 class="card-title">${icons.email} Company Email Notification Settings</h2>
