@@ -13,7 +13,14 @@ export function renderSuperiorView(container, superiorId) {
         (r.teamMembers && r.teamMembers.some(tid => teamMemberIds.includes(tid)))
     );
 
-    const pendingRequests = db.getRequests().filter(r => r.status === 'Pending Approval');
+    const superiorUser = db.getUser(superiorId);
+    const isGlobal = superiorUser && (superiorUser.role === 'superadmin' || superiorUser.role === 'admin' || db.getUserDataScope(superiorId) === 'global');
+
+    const pendingRequests = db.getRequests().filter(r => {
+        if (r.status !== 'Pending Approval') return false;
+        if (isGlobal) return true;
+        return db.canUserApproveFor(superiorId, r.requesterId) || r.approverId === superiorId;
+    });
     const approvedTeamRequests = teamRequests.filter(r => r.status === 'Approved');
     const totalTeamApprovedHours = approvedTeamRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
@@ -91,9 +98,13 @@ export function renderSuperiorView(container, superiorId) {
                                             <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Scheduled</div>
                                             <div style="font-weight: 800; font-size: 1.05rem; color: var(--primary);">${Number(r.duration || 0).toFixed(1)}h</div>
                                         </div>
-                                        <button class="btn btn-success btn-sm btn-sup-close-ot" data-id="${r.id}" style="padding: 6px 14px; font-weight: 700; font-size: 0.78rem;">
-                                            Close OT &amp; Submit Actuals
-                                        </button>
+                                        ${r.requesterId === superiorId ? `
+                                            <button class="btn btn-success btn-sm btn-sup-close-ot" data-id="${r.id}" style="padding: 6px 14px; font-weight: 700; font-size: 0.78rem;">
+                                                Close OT &amp; Submit Actuals
+                                            </button>
+                                        ` : `
+                                            <span class="badge badge-info" style="font-size: 0.72rem; padding: 6px 10px;">Requester Closeout Pending</span>
+                                        `}
                                     </div>
                                 </div>
                             </div>
@@ -495,7 +506,11 @@ export function renderSuperiorView(container, superiorId) {
 
     // --- 3. Render Pending Approvals ---
     const loadPendingQueue = () => {
-        const requests = db.getRequests().filter(r => r.status === 'Pending Approval');
+        const requests = db.getRequests().filter(r => {
+            if (r.status !== 'Pending Approval') return false;
+            if (isGlobal) return true;
+            return db.canUserApproveFor(superiorId, r.requesterId) || r.approverId === superiorId;
+        });
 
         pendingCountBadge.innerText = `${requests.length} Pending`;
 

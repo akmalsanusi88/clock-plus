@@ -1,6 +1,6 @@
 // Clock+ Admin View Controller - 4 Dedicated Pages (Dashboard, Request, Report, Settings)
 import { db } from '../db.js';
-import { showToast, showRequestSubmittedModal, showRequestDecisionModal, formatDateTime, formatDateOnly, icons } from './shared.js';
+import { showToast, showRequestSubmittedModal, showRequestDecisionModal, formatDateTime, formatDateOnly, icons, renderRoleBadge, formatRoleName } from './shared.js';
 
 export function renderAdminView(container, subview = 'dashboard') {
     if (subview === 'request') {
@@ -23,6 +23,8 @@ export function renderAdminDashboard(container) {
     const workers = users.filter(u => u.role === 'worker');
     const currentUser = db.getCurrentUser();
     const currentUserId = currentUser ? currentUser.id : null;
+    const currentEmail = currentUser?.email || '';
+    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
     
     const approvedRequests = requests.filter(r => r.status === 'Approved');
     const pendingRequests = requests.filter(r => r.status === 'Pending Approval' || r.status === 'Pending Worker Consent');
@@ -1117,13 +1119,18 @@ export function renderAdminReport(container) {
     const renderEmployeeOptions = (searchTerm = '') => {
         const term = searchTerm.toLowerCase().trim();
         const currentUsers = db.getUsers();
-        const filteredUsers = currentUsers.filter(u => 
+        const currentUser = db.getCurrentUser();
+        const accessibleWorkerIds = currentUser ? db.getAccessibleWorkerIds(currentUser.id) : [];
+        const isGlobal = currentUser && (currentUser.role === 'superadmin' || currentUser.role === 'admin' || db.getUserDataScope(currentUser.id) === 'global');
+        const availableUsers = isGlobal ? currentUsers : currentUsers.filter(u => accessibleWorkerIds.includes(u.id));
+
+        const filteredUsers = availableUsers.filter(u => 
             !term || u.name.toLowerCase().includes(term) || (u.email && u.email.toLowerCase().includes(term))
         );
 
         let html = `
             <div class="searchable-select-option ${selectedEmployeeId === '' ? 'selected' : ''}" data-value="">
-                All Employees
+                ${isGlobal ? 'All Employees' : 'My Accessible Team'}
             </div>
         `;
 
@@ -1143,7 +1150,7 @@ export function renderAdminReport(container) {
                 e.stopPropagation();
                 selectedEmployeeId = opt.dataset.value;
                 if (!selectedEmployeeId) {
-                    empLabel.innerText = 'All Employees';
+                    empLabel.innerText = isGlobal ? 'All Employees' : 'My Accessible Team';
                 } else {
                     const u = db.getUser(selectedEmployeeId);
                     empLabel.innerText = u ? u.name : selectedEmployeeId;
@@ -1244,8 +1251,18 @@ export function renderAdminReport(container) {
         const toDateStr = filterDateTo.value;
 
         const allReqs = db.getRequests();
+        const currentUser = db.getCurrentUser();
+        const accessibleWorkerIds = currentUser ? db.getAccessibleWorkerIds(currentUser.id) : [];
+        const isGlobal = currentUser && (currentUser.role === 'superadmin' || currentUser.role === 'admin' || db.getUserDataScope(currentUser.id) === 'global');
 
         currentFiltered = allReqs.filter(r => {
+            // Data Scope Filter: non-global users only see requests in their accessible workforce
+            if (!isGlobal) {
+                const reqParticipating = [r.requesterId, ...(r.teamMembers || [])];
+                const hasAccess = reqParticipating.some(id => accessibleWorkerIds.includes(id));
+                if (!hasAccess) return false;
+            }
+
             const projectObj = db.getProject(r.project);
             const pName = projectObj ? projectObj.name : (r.project || '');
 
@@ -1682,13 +1699,14 @@ export function renderAdminReport(container) {
 
 export function renderAdminSettings(container) {
     const currentUser = db.getCurrentUser();
-    const isAdmin = currentUser && currentUser.role === 'admin';
+    const isAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin');
+    const isSuperAdmin = currentUser && currentUser.role === 'superadmin';
 
     if (!isAdmin && currentUser) {
         const displayName = (currentUser.name && currentUser.name !== currentUser.email && currentUser.name !== 'User') ? currentUser.name : '';
         const userEmail = currentUser.email || '';
         const userPosition = currentUser.position || 'Staff';
-        const userRoleFormatted = currentUser.role === 'superior' ? 'Superior / Approver' : (currentUser.role === 'worker' ? 'Worker / Employee' : currentUser.role);
+        const userRoleFormatted = formatRoleName(currentUser.role);
 
         container.innerHTML = `
             <div class="card glass-panel" style="max-width: 620px; margin: 0 auto;">
@@ -1865,8 +1883,19 @@ export function renderAdminSettings(container) {
                             <label for="edit-user-role" style="font-weight: 600; font-size: 0.86rem; margin-bottom: 6px; display: block; color: var(--text-main);">System Role</label>
                             <select id="edit-user-role" required style="width: 100%; background:#ffffff !important; color:#0f172a !important; padding: 10px 14px; font-size: 0.92rem; border-radius: 8px; border: 1.5px solid var(--border-color);">
                                 <option value="worker">Worker / Employee</option>
-                                <option value="superior">Superior / Approver</option>
+                                <option value="supervisor">Site Supervisor / Coordinator</option>
+                                <option value="superior">Manager / Approver</option>
                                 <option value="admin">System Admin</option>
+                                <option value="superadmin">Super Administrator</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" style="margin-bottom: 0;">
+                            <label for="edit-user-data-scope" style="font-weight: 600; font-size: 0.86rem; margin-bottom: 6px; display: block; color: var(--text-main);">Data Visibility Scope</label>
+                            <select id="edit-user-data-scope" required style="width: 100%; background:#ffffff !important; color:#0f172a !important; padding: 10px 14px; font-size: 0.92rem; border-radius: 8px; border: 1.5px solid var(--border-color);">
+                                <option value="own">Personal (Self Only — View own shifts & records)</option>
+                                <option value="team">Team (Subordinates in Hierarchy)</option>
+                                <option value="global">Global (All Company Records & Workers)</option>
                             </select>
                         </div>
                     </div>
@@ -1934,7 +1963,7 @@ export function renderAdminSettings(container) {
                                 </div>
                                 <div class="perm-tile-body">
                                     <div class="perm-tile-title">Settings</div>
-                                    <div class="perm-tile-desc">Users & thresholds</div>
+                                    <div class="perm-tile-desc">Users & profile</div>
                                 </div>
                                 <div class="perm-checkbox-custom"></div>
                             </label>
@@ -1962,9 +1991,11 @@ export function renderAdminSettings(container) {
             <button type="button" class="settings-tab-btn" data-tab="tab-hierarchy">
                 ${icons.hierarchy} Approver Hierarchy Mapping
             </button>
-            <button type="button" class="settings-tab-btn" data-tab="tab-limits">
-                ${icons.limits} Compliance Hour Thresholds
-            </button>
+            ${isSuperAdmin ? `
+                <button type="button" class="settings-tab-btn" data-tab="tab-limits">
+                    ${icons.limits} Compliance Hour Thresholds
+                </button>
+            ` : ''}
         </div>
 
         <!-- TAB 1: User Accounts Management -->
@@ -1999,8 +2030,18 @@ export function renderAdminSettings(container) {
                                 <label for="new-user-role">System Role</label>
                                 <select id="new-user-role" required style="background:#ffffff !important; color:#0f172a !important;">
                                     <option value="worker">Worker / Employee</option>
-                                    <option value="superior">Superior / Approver</option>
+                                    <option value="supervisor">Site Supervisor / Coordinator</option>
+                                    <option value="superior">Manager / Approver</option>
                                     <option value="admin">System Admin</option>
+                                    <option value="superadmin">Super Administrator</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="new-user-data-scope">Data Visibility Scope</label>
+                                <select id="new-user-data-scope" required style="background:#ffffff !important; color:#0f172a !important;">
+                                    <option value="own">Personal (Self Only)</option>
+                                    <option value="team">Team (Subordinates in Hierarchy)</option>
+                                    <option value="global">Global (All Company Records)</option>
                                 </select>
                             </div>
                             <div class="form-group">
@@ -2027,6 +2068,7 @@ export function renderAdminSettings(container) {
                                 <th>User</th>
                                 <th>Email</th>
                                 <th>Role</th>
+                                <th>Data Scope</th>
                                 <th>Position</th>
                                 <th>Allowed Pages</th>
                             </tr>
@@ -2199,12 +2241,17 @@ export function renderAdminSettings(container) {
             
             const displayName = (u.name && u.name !== u.email && u.name !== 'User') ? u.name : (u.email || u.name || 'User');
             const emailDisplay = u.email || '-';
+            const scopeVal = u.data_scope || u.dataScope || db.getUserDataScope(u.id);
+            const scopeBadge = scopeVal === 'global' ? `<span class="badge" style="background:#ede9fe; color:#6d28d9; border:1px solid #ddd6fe; font-size:0.72rem;">Global</span>` :
+                (scopeVal === 'team' ? `<span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.72rem;">Team</span>` :
+                `<span class="badge" style="background:#f1f5f9; color:#475569; border:1px solid #e2e8f0; font-size:0.72rem;">Personal</span>`);
 
             return `
                 <tr class="clickable-user-row" data-id="${u.id}" style="cursor: pointer; transition: background 0.15s ease;">
                     <td><div style="font-weight: 700; color: var(--text-main); font-size: 0.95rem;">${displayName}</div></td>
                     <td><div style="font-size: 0.85rem; color: var(--text-muted);">${emailDisplay}</div></td>
-                    <td><span class="badge" style="text-transform: capitalize;">${u.role}</span></td>
+                    <td>${renderRoleBadge(u.role)}</td>
+                    <td>${scopeBadge}</td>
                     <td>${u.position || 'Staff'}</td>
                     <td>${pageTags}</td>
                 </tr>
@@ -2224,6 +2271,10 @@ export function renderAdminSettings(container) {
                 editUserNameInput.value = (u.name && u.name !== u.email && u.name !== 'User') ? u.name : '';
                 editUserEmailInput.value = u.email || '';
                 editUserRoleSelect.value = u.role || 'worker';
+                const scopeSelect = document.getElementById('edit-user-data-scope');
+                if (scopeSelect) {
+                    scopeSelect.value = u.data_scope || u.dataScope || db.getUserDataScope(uid);
+                }
                 editUserPositionInput.value = u.position || '';
 
                 const allowed = db.getUserAllowedPages(uid);
@@ -2271,6 +2322,7 @@ export function renderAdminSettings(container) {
         const name = editUserNameInput.value.trim();
         const email = editUserEmailInput.value.trim();
         const role = editUserRoleSelect.value;
+        const dataScope = document.getElementById('edit-user-data-scope') ? document.getElementById('edit-user-data-scope').value : 'own';
         const position = editUserPositionInput.value.trim();
 
         const selectedPages = [];
@@ -2292,7 +2344,9 @@ export function renderAdminSettings(container) {
                 name: name || email,
                 email: email,
                 role: role,
-                position: position
+                position: position,
+                data_scope: dataScope,
+                dataScope: dataScope
             });
             await db.updateUserPermissions(uid, selectedPages);
 
@@ -2337,8 +2391,13 @@ export function renderAdminSettings(container) {
         const customName = document.getElementById('new-user-name').value.trim();
         const name = customName || email;
         const role = document.getElementById('new-user-role').value;
+        const dataScope = document.getElementById('new-user-data-scope') ? document.getElementById('new-user-data-scope').value : 'own';
         const position = document.getElementById('new-user-position').value.trim();
         const password = document.getElementById('new-user-password').value.trim();
+
+        const defaultPerms = (role === 'superadmin' || role === 'admin') 
+            ? ['dashboard', 'request', 'report', 'settings']
+            : ['dashboard', 'request', 'report'];
 
         try {
             await db.createUser({
@@ -2347,14 +2406,17 @@ export function renderAdminSettings(container) {
                 position,
                 email,
                 password,
-                permissions: role === 'admin' ? ['dashboard', 'request', 'report', 'settings'] : (role === 'superior' ? ['dashboard', 'request', 'report'] : ['dashboard', 'request'])
+                data_scope: dataScope,
+                dataScope: dataScope,
+                permissions: defaultPerms
             });
 
-            showToast(`User account ${name} created in Supabase Authentication & company users.`, "success");
+            showToast(`User account ${name} created successfully.`, "success");
             newUserForm.reset();
             createUserDrawer.style.display = 'none';
             loadUsers();
             loadHierarchy();
+            window.dispatchEvent(new Event('clock_plus_db_update'));
         } catch (err) {
             console.error("Failed to create user:", err);
             showToast(err.message || "Failed to create user.", "error");
@@ -2371,7 +2433,8 @@ export function renderAdminSettings(container) {
 
         hierarchyList.innerHTML = allEmployees.map(w => {
             const approvers = db.getApproversForWorker(w.id);
-            const eligibleSuperiors = users.filter(s => (s.role === 'superior' || s.role === 'admin') && s.id !== w.id);
+            // Any user in company (except worker themselves) can be assigned as approver
+            const eligibleSuperiors = users.filter(s => s.id !== w.id);
 
             const buildOptions = (selectedId) => eligibleSuperiors.map(s => `
                 <option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>

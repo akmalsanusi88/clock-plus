@@ -199,7 +199,18 @@ class Database {
 
             const mappedCompanyUsers = (company_users || []).map(cu => {
                 const rawRole = (cu.role || '').toLowerCase().trim();
-                const normalizedRole = (rawRole === 'admin') ? 'admin' : ((rawRole === 'superior') ? 'superior' : 'worker');
+                let normalizedRole = 'worker';
+                if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+                else if (rawRole === 'admin') normalizedRole = 'admin';
+                else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+                else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+                else normalizedRole = 'worker';
+
+                const dataScope = cu.data_scope || cu.dataScope || (
+                    normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+                    (normalizedRole === 'superior' ? 'team' : 'own')
+                );
+
                 const userEmail = (cu.email && cu.email.trim() !== '') ? cu.email : (currentAuthEmail || '');
                 const hasCustomName = cu.name && cu.name.trim() !== '' && cu.name.toUpperCase() !== 'EMPTY' && cu.name !== 'User';
                 const cleanName = hasCustomName ? cu.name : (userEmail || 'User');
@@ -209,21 +220,28 @@ class Database {
                     try { userPerms = JSON.parse(userPerms); } catch (e) {}
                 }
                 if (!userPerms || !Array.isArray(userPerms) || userPerms.length === 0) {
-                    userPerms = normalizedRole === 'admin' 
+                    userPerms = (normalizedRole === 'superadmin' || normalizedRole === 'admin') 
                         ? ['dashboard', 'request', 'report', 'settings']
-                        : (normalizedRole === 'superior' ? ['dashboard', 'request', 'report'] : ['dashboard', 'request']);
+                        : ['dashboard', 'request', 'report'];
                 }
                 this.data.user_permissions[cu.user_id] = userPerms;
+
+                const defaultPosition = normalizedRole === 'superadmin' ? 'Super Administrator' :
+                    (normalizedRole === 'admin' ? 'Administrator' :
+                    (normalizedRole === 'superior' ? 'Project Manager' :
+                    (normalizedRole === 'supervisor' ? 'Site Supervisor' : 'Staff')));
 
                 return {
                     companyId: cu.company_id,
                     userId: cu.user_id,
                     name: cleanName,
                     role: normalizedRole,
-                    position: cu.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
+                    position: cu.position || defaultPosition,
                     email: userEmail,
                     password: cu.password || 'password123',
-                    permissions: userPerms
+                    permissions: userPerms,
+                    data_scope: dataScope,
+                    dataScope: dataScope
                 };
             });
 
@@ -247,7 +265,9 @@ class Database {
                         position: cu.position,
                         email: cu.email || '',
                         password: cu.password,
-                        permissions: cu.permissions
+                        permissions: cu.permissions,
+                        data_scope: cu.data_scope,
+                        dataScope: cu.dataScope
                     });
                 }
             }
@@ -716,7 +736,10 @@ class Database {
         if (updatedFields.email !== undefined) payload.email = updatedFields.email;
         if (updatedFields.position !== undefined) payload.position = updatedFields.position;
         if (updatedFields.role !== undefined) {
-            payload.role = updatedFields.role === 'admin' ? 'admin' : (updatedFields.role === 'superior' ? 'superior' : 'member');
+            payload.role = updatedFields.role;
+        }
+        if (updatedFields.data_scope !== undefined || updatedFields.dataScope !== undefined) {
+            payload.data_scope = updatedFields.data_scope || updatedFields.dataScope;
         }
 
         console.log("Updating company_users in Supabase with payload:", { id, payload });
@@ -895,11 +918,9 @@ class Database {
 
         if (target) return target;
 
-        // Fallback: If no explicit mapping exists, route to first Superior or Admin in company
-        const superior = this.getUsers().find(u => u.role === 'superior' && u.id !== workerId);
-        if (superior) return superior.id;
-        const admin = this.getUsers().find(u => u.role === 'admin' && u.id !== workerId);
-        if (admin) return admin.id;
+        // Fallback: If no explicit mapping exists, route to first Superadmin, Admin, or Superior in company
+        const fallbackLeader = this.getUsers().find(u => (u.role === 'superadmin' || u.role === 'admin' || u.role === 'superior') && u.id !== workerId);
+        if (fallbackLeader) return fallbackLeader.id;
 
         return null;
     }
@@ -913,11 +934,70 @@ class Database {
                 workerIds.push(h.workerId);
             }
         }
-        // If hierarchy is not yet explicitly mapped, superior manages all workers
+        
+        const superiorUser = this.getUser(superiorId);
+        const isGlobalRole = superiorUser && (superiorUser.role === 'superadmin' || superiorUser.role === 'admin');
+
+        // If hierarchy is not yet explicitly mapped, global admins manage all, superiors manage all non-admins
         if (workerIds.length === 0) {
-            return this.getUsers().filter(u => u.role === 'worker' && u.id !== superiorId);
+            if (isGlobalRole) {
+                return this.getUsers().filter(u => u.id !== superiorId);
+            }
+            if (superiorUser && superiorUser.role === 'superior') {
+                return this.getUsers().filter(u => u.id !== superiorId && u.role !== 'admin' && u.role !== 'superadmin');
+            }
+            return [];
         }
         return this.getUsers().filter(u => workerIds.includes(u.id));
+    }
+
+    getUserDataScope(userId) {
+        const user = this.getUser(userId);
+        if (!user) return 'own';
+        if (user.data_scope) return user.data_scope;
+        if (user.dataScope) return user.dataScope;
+        
+        if (user.role === 'superadmin' || user.role === 'admin') return 'global';
+        if (user.role === 'superior') return 'team';
+        
+        const subordinates = this.getSubordinatesForSuperior(userId);
+        if (subordinates && subordinates.length > 0) return 'team';
+        
+        return 'own';
+    }
+
+    getAccessibleWorkerIds(userId) {
+        const scope = this.getUserDataScope(userId);
+        if (scope === 'global') {
+            return this.getUsers().map(u => u.id);
+        }
+        if (scope === 'team') {
+            const subIds = this.getSubordinatesForSuperior(userId).map(u => u.id);
+            const ids = new Set([userId, ...subIds]);
+            return Array.from(ids);
+        }
+        return [userId];
+    }
+
+    canUserApproveFor(approverId, workerId) {
+        if (!approverId || !workerId) return false;
+        const approver = this.getUser(approverId);
+        if (!approver) return false;
+
+        // Superadmin and Admin have global approval override power
+        if (approver.role === 'superadmin' || approver.role === 'admin') return true;
+
+        // Check assigned hierarchy
+        const approvers = this.getApproversForWorker(workerId);
+        return approvers.level1 === approverId || approvers.level2 === approverId || approvers.level3 === approverId;
+    }
+
+    hasApprovalQueue(userId) {
+        const user = this.getUser(userId);
+        if (!user) return false;
+        if (user.role === 'superadmin' || user.role === 'admin') return true;
+        const subordinates = this.getSubordinatesForSuperior(userId);
+        return subordinates.length > 0;
     }
 
     async updateHierarchyMapping(workerId, level1Id, level2Id = null, level3Id = null) {

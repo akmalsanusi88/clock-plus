@@ -2,7 +2,7 @@ import { db } from './db.js';
 import { renderAdminView, renderAdminRequest, renderAdminReport } from './views/admin.js';
 import { renderWorkerView } from './views/worker.js';
 import { renderSuperiorView } from './views/superior.js';
-import { showToast, showRequestDecisionModal, openCloseOTModal, showCancelOTConfirmationModal, formatDateTime, icons } from './views/shared.js';
+import { showToast, showRequestDecisionModal, openCloseOTModal, showCancelOTConfirmationModal, formatDateTime, icons, formatRoleName, renderRoleBadge } from './views/shared.js';
 
 // Application State
 const state = {
@@ -197,7 +197,7 @@ function switchUser(userId) {
 
     // Update Header User Profile Pill on Top-Right
     const initials = (user.name || user.email || 'User').split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase();
-    const rolePositionText = `${user.role === 'superior' ? 'Superior' : (user.role === 'admin' ? 'Admin' : 'Worker')} (${user.position || 'Staff'})`;
+    const rolePositionText = `${formatRoleName(user.role)} (${user.position || 'Staff'})`;
 
     const headerAvatar = document.getElementById('header-avatar');
     const headerUserName = document.getElementById('header-user-name');
@@ -206,116 +206,59 @@ function switchUser(userId) {
     if (headerUserName) headerUserName.innerText = user.name || user.email || 'User';
     if (headerUserRole) headerUserRole.innerText = rolePositionText;
 
-    // Render Navigation based on User Role
+    // Render Navigation based on User Role & Data Scope
     renderNavigation(user);
 
     // Refresh Notifications
     updateNotificationsUI();
 }
 
-// 2. Render Navigation Menu Items Based on Role
+// 2. Render Navigation Menu Items Based on Role & Data Scope
 function renderNavigation(user) {
     const bottomNav = document.getElementById('mobile-bottom-nav');
     const bubbleMenuItems = document.getElementById('bubble-menu-items');
     
     let bubbleNavHtml = '';
     let bottomNavHtml = '';
-    
-    if (user.role === 'admin') {
-        const allowed = db.getUserAllowedPages(user.id);
-        if (!state.currentView || !state.currentView.startsWith('admin-')) {
-            state.currentView = allowed.includes('dashboard') ? 'admin-dashboard' : `admin-${allowed[0] || 'dashboard'}`;
-        }
 
-        if (allowed.includes('dashboard')) {
-            const act = state.currentView === 'admin-dashboard' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="admin-dashboard">${icons.dashboard}<span>Dashboard</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="admin-dashboard">${icons.dashboard}<span>Dashboard</span></a>`;
-        }
-        if (allowed.includes('request')) {
-            const act = state.currentView === 'admin-request' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="admin-request">${icons.assignment}<span>Request</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="admin-request">${icons.assignment}<span>Request</span></a>`;
-        }
-        if (allowed.includes('report')) {
-            const act = state.currentView === 'admin-report' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="admin-report">${icons.reports}<span>Report</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="admin-report">${icons.reports}<span>Report</span></a>`;
-        }
-        if (allowed.includes('settings')) {
-            const act = state.currentView === 'admin-settings' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="admin-settings">${icons.settings}<span>Settings</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="admin-settings">${icons.settings}<span>Settings</span></a>`;
-        }
+    const isGlobal = user.role === 'superadmin' || user.role === 'admin' || db.getUserDataScope(user.id) === 'global';
+    const hasQueue = user.role === 'superior' || db.hasApprovalQueue(user.id) || db.getUserDataScope(user.id) === 'team';
+    const prefix = isGlobal ? 'admin' : (hasQueue ? 'superior' : 'worker');
 
-        bottomNavHtml += `
-            <a class="bottom-nav-item" data-action="logout">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                <span>Log Out</span>
-            </a>
-        `;
-    } else if (user.role === 'superior') {
-        const allowed = db.getUserAllowedPages(user.id);
-        if (!state.currentView || (!state.currentView.startsWith('superior-') && state.currentView !== 'superior')) {
-            state.currentView = allowed.includes('dashboard') ? 'superior-dashboard' : `superior-${allowed[0] || 'dashboard'}`;
-        }
-
-        if (allowed.includes('dashboard')) {
-            const act = (state.currentView === 'superior-dashboard' || state.currentView === 'superior') ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="superior-dashboard">${icons.dashboard}<span>Approvals & Console</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="superior-dashboard">${icons.dashboard}<span>Approvals</span></a>`;
-        }
-        if (allowed.includes('request')) {
-            const act = state.currentView === 'superior-request' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="superior-request">${icons.assignment}<span>Request OT</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="superior-request">${icons.assignment}<span>Request OT</span></a>`;
-        }
-        if (allowed.includes('report')) {
-            const act = state.currentView === 'superior-report' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="superior-report">${icons.reports}<span>Report</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="superior-report">${icons.reports}<span>Report</span></a>`;
-        }
-        if (allowed.includes('settings')) {
-            const act = state.currentView === 'superior-settings' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="superior-settings">${icons.settings}<span>Settings</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="superior-settings">${icons.settings}<span>Settings</span></a>`;
-        }
-
-        bottomNavHtml += `
-            <a class="bottom-nav-item" data-action="logout">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                <span>Log Out</span>
-            </a>
-        `;
-    } else {
-        const allowed = db.getUserAllowedPages(user.id);
-        if (!state.currentView || (!state.currentView.startsWith('worker-') && state.currentView !== 'worker')) {
-            state.currentView = allowed.includes('dashboard') ? 'worker-dashboard' : `worker-${allowed[0] || 'dashboard'}`;
-        }
-
-        if (allowed.includes('dashboard')) {
-            const act = (state.currentView === 'worker-dashboard' || state.currentView === 'worker') ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="worker-dashboard">${icons.dashboard}<span>Employee Dashboard</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="worker-dashboard">${icons.dashboard}<span>Dashboard</span></a>`;
-        }
-        if (allowed.includes('request')) {
-            const act = state.currentView === 'worker-request' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="worker-request">${icons.assignment}<span>Request OT</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="worker-request">${icons.assignment}<span>Request OT</span></a>`;
-        }
-        if (allowed.includes('report')) {
-            const act = state.currentView === 'worker-report' ? 'active' : '';
-            bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="worker-report">${icons.reports}<span>Report</span></a>`;
-            bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="worker-report">${icons.reports}<span>Report</span></a>`;
-        }
-
-        bottomNavHtml += `
-            <a class="bottom-nav-item" data-action="logout">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-                <span>Log Out</span>
-            </a>
-        `;
+    const allowed = db.getUserAllowedPages(user.id);
+    if (!state.currentView || !state.currentView.startsWith(`${prefix}-`)) {
+        state.currentView = allowed.includes('dashboard') ? `${prefix}-dashboard` : `${prefix}-${allowed[0] || 'dashboard'}`;
     }
+
+    if (allowed.includes('dashboard')) {
+        const act = state.currentView === `${prefix}-dashboard` ? 'active' : '';
+        const dashLabel = isGlobal ? 'Dashboard' : (hasQueue ? 'Approvals & Team' : 'Dashboard');
+        bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="${prefix}-dashboard">${icons.dashboard}<span>${dashLabel}</span></a>`;
+        bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="${prefix}-dashboard">${icons.dashboard}<span>${dashLabel}</span></a>`;
+    }
+    if (allowed.includes('request')) {
+        const act = state.currentView === `${prefix}-request` ? 'active' : '';
+        bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="${prefix}-request">${icons.assignment}<span>Request OT</span></a>`;
+        bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="${prefix}-request">${icons.assignment}<span>Request OT</span></a>`;
+    }
+    if (allowed.includes('report')) {
+        const act = state.currentView === `${prefix}-report` ? 'active' : '';
+        bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="${prefix}-report">${icons.reports}<span>Report</span></a>`;
+        bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="${prefix}-report">${icons.reports}<span>Report</span></a>`;
+    }
+    if (allowed.includes('settings')) {
+        const act = state.currentView === `${prefix}-settings` ? 'active' : '';
+        const setLabel = isGlobal ? 'Settings & Users' : 'Settings';
+        bubbleNavHtml += `<a class="bubble-menu-item ${act}" data-view="${prefix}-settings">${icons.settings}<span>${setLabel}</span></a>`;
+        bottomNavHtml += `<a class="bottom-nav-item ${act}" data-view="${prefix}-settings">${icons.settings}<span>${setLabel}</span></a>`;
+    }
+
+    bottomNavHtml += `
+        <a class="bottom-nav-item" data-action="logout">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            <span>Log Out</span>
+        </a>
+    `;
 
     // Add Switch Company workspace link
     bubbleNavHtml += `
@@ -672,7 +615,7 @@ export function openRequestReviewModal(requestId) {
     const approver = db.getUser(req.approverId);
     const project = db.getProject(req.project);
     const projectName = project ? project.name : (req.project || 'General Project');
-    const isApproverOrAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superior' || req.approverId === currentUser.id);
+    const isApproverOrAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin' || db.canUserApproveFor(currentUser.id, req.requesterId) || req.approverId === currentUser.id);
 
     modalTitle.innerHTML = `Overtime Request: <strong>${req.id}</strong>`;
     modalSubtitle.innerText = `Submitted on ${formatDateTime(req.startDate || req.dateStart)}`;
@@ -836,7 +779,7 @@ export function openRequestReviewModal(requestId) {
             </div>
         `;
     } else {
-        const canClose = req.status === 'Approved' && (req.requesterId === currentUser?.id || isApproverOrAdmin);
+        const canClose = req.status === 'Approved' && (req.requesterId === currentUser?.id || (currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')));
         contentHtml += `
             <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: flex-end; gap: 8px;">
                 ${canClose ? `<button type="button" class="btn btn-success" id="rev-btn-close-ot" style="font-weight:700;">Close OT &amp; Submit Actuals</button>` : ''}

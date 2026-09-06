@@ -77,9 +77,13 @@ export function renderWorkerView(container, workerId) {
                                             <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase;">Scheduled</div>
                                             <div style="font-weight: 800; font-size: 1.05rem; color: var(--primary);">${Number(r.duration || 0).toFixed(1)}h</div>
                                         </div>
-                                        <button class="btn btn-success btn-sm btn-worker-close-ot" data-id="${r.id}" style="padding: 6px 14px; font-weight: 700; font-size: 0.78rem;">
-                                            Close OT &amp; Submit Actuals
-                                        </button>
+                                        ${r.requesterId === workerId ? `
+                                            <button class="btn btn-success btn-sm btn-worker-close-ot" data-id="${r.id}" style="padding: 6px 14px; font-weight: 700; font-size: 0.78rem;">
+                                                Close OT &amp; Submit Actuals
+                                            </button>
+                                        ` : `
+                                            <span class="badge badge-info" style="font-size: 0.72rem; padding: 6px 10px;">Requester Closeout Pending</span>
+                                        `}
                                     </div>
                                 </div>
                             </div>
