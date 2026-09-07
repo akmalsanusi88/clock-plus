@@ -616,6 +616,7 @@ export function openRequestReviewModal(requestId) {
     const project = db.getProject(req.project);
     const projectName = project ? project.name : (req.project || 'General Project');
     const isApproverOrAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin' || db.canUserApproveFor(currentUser.id, req.requesterId) || req.approverId === currentUser.id);
+    const isSuperAdmin = currentUser && (currentUser.role === 'superadmin');
 
     modalTitle.innerHTML = `Overtime Request: <strong>${req.id}</strong>`;
     modalSubtitle.innerText = `Submitted on ${formatDateTime(req.startDate || req.dateStart)}`;
