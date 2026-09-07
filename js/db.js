@@ -204,6 +204,29 @@ class Database {
                 }
             }
 
+            // Auto-push any local hierarchy mappings that need syncing to Supabase
+            if (this.data.hierarchy && this.data.hierarchy.length > 0) {
+                const sbWorkerIds = new Set((sbHierarchy || []).map(h => `${h.worker_id}_${h.company_id || ''}`));
+                const unsyncedHierarchy = this.data.hierarchy.filter(h => !sbWorkerIds.has(`${h.workerId}_${h.companyId || ''}`) && (h.approverId || h.level1));
+                for (const h of unsyncedHierarchy) {
+                    supabase.from('hierarchy').upsert({
+                        company_id: h.companyId || activeCompanyId || null,
+                        worker_id: h.workerId,
+                        approver_id: h.approverId || h.level1 || '',
+                        level2_id: h.level2 || null,
+                        level3_id: h.level3 || null
+                    }).then(({ error }) => {
+                        if (error) {
+                            // Fallback for older schema
+                            supabase.from('hierarchy').upsert({
+                                worker_id: h.workerId,
+                                approver_id: h.approverId || h.level1 || ''
+                            });
+                        }
+                    });
+                }
+            }
+
             let currentAuthEmail = '';
             try {
                 const { data: authData } = await supabase.auth.getUser();
