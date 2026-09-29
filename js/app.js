@@ -623,12 +623,15 @@ export function openRequestReviewModal(requestId) {
     const isApproverOrAdmin = currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin' || db.canUserApproveFor(currentUser.id, req.requesterId) || req.approverId === currentUser.id);
     const isSuperAdmin = currentUser && (currentUser.role === 'superadmin');
 
-    modalTitle.innerHTML = `Overtime Request: <strong>${req.id}</strong>`;
-    modalSubtitle.innerText = `Submitted on ${formatDateTime(req.startDate || req.dateStart)}`;
+    modalTitle.innerHTML = `Overtime Record: <strong>${req.id}</strong>`;
+    modalSubtitle.innerText = `Submitted on ${formatDateTime(req.startDate || req.dateStart || req.created_at)}`;
 
     let statusBadge = '';
-    if (req.status === 'Approved') statusBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
+    if (req.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed &amp; Verified</span>`;
+    else if (req.status === 'Pending Verification') statusBadge = `<span class="badge badge-pending" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a;">Pending Verification</span>`;
+    else if (req.status === 'Approved') statusBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
     else if (req.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
+    else if (req.status === 'Cancelled') statusBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecdd3;">${icons.times} Cancelled</span>`;
     else if (req.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
     else statusBadge = `<span class="badge badge-pending">Pending Approval</span>`;
 
@@ -648,179 +651,290 @@ export function openRequestReviewModal(requestId) {
     const defaultTimeStart = cleanTime(req.timeStart || (req.startDate ? new Date(req.startDate).toTimeString().slice(0, 5) : '18:00'));
     const defaultTimeEnd = cleanTime(req.timeEnd || (req.endDate ? new Date(req.endDate).toTimeString().slice(0, 5) : '20:00'));
 
-    let contentHtml = `
-        <!-- Request Summary Card -->
-        <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 12px; padding: 14px 16px;">
-            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:8px; margin-bottom:12px;">
-                <div>
-                    <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:var(--primary); margin-bottom:2px;">Requested by:</div>
-                    <div style="font-weight:700; font-size:1.05rem; color:var(--text-main);">${requester ? requester.name : req.requesterId}</div>
-                    <div style="font-size:0.82rem; color:var(--text-muted);">${requester ? requester.position : 'Staff'} • ${requester ? requester.email : ''}</div>
-                </div>
-                <div>${statusBadge}</div>
-            </div>
+    const requesterName = requester ? requester.name : req.requesterId;
+    const requesterRole = requester ? (requester.position || requester.role || 'Worker') : 'Worker';
+    const requesterEmail = requester?.email || '';
 
-            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; font-size:0.85rem; border-top:1px solid var(--border-color); padding-top:10px;">
-                <div><strong>Project:</strong> ${projectName}</div>
-                <div><strong>Duration:</strong> <span style="font-weight:700; color:var(--primary);">${Number(req.duration).toFixed(1)} hrs</span></div>
-                ${approver ? `<div><strong>Assigned Approver:</strong> ${approver.name}</div>` : ''}
-                <div style="grid-column: 1 / -1;"><strong>Target Deliverables:</strong> ${req.targetWork || 'N/A'}</div>
-                ${req.workProgress ? `<div style="grid-column: 1 / -1;"><strong>Work Progress:</strong> ${req.workProgress}</div>` : ''}
-                ${teamNames !== 'None' ? `<div style="grid-column: 1 / -1;"><strong>Collaborating Workers:</strong> ${teamNames}</div>` : ''}
+    // History extraction helpers
+    const historyList = Array.isArray(req.history) ? req.history : [];
+    const approveEvent = historyList.find(h => h.action && (h.action.includes('Approved') || h.action.includes('authorized')));
+    const rejectEvent = historyList.find(h => h.action && h.action.includes('Rejected'));
+    const closeEvent = historyList.find(h => h.action && h.action.includes('Closed'));
+    const verifyEvent = historyList.find(h => h.action && h.action.includes('Verified'));
+
+    // Approver details
+    const approverUserId = req.approvedBy || approveEvent?.userId || req.approverId;
+    const approverObj = approverUserId ? db.getUser(approverUserId) : approver;
+    const approverName = approverObj ? approverObj.name : (approverUserId || 'Not assigned');
+    const approverRole = approverObj ? (approverObj.position || approverObj.role || 'Approver') : 'Approver';
+    const approvedAtTime = req.approvedAt || approveEvent?.timestamp || (req.status !== 'Pending Approval' && req.status !== 'Rejected' ? (req.startDate || req.created_at) : null);
+
+    // Closer details
+    const closerUserId = req.closedBy || closeEvent?.userId || req.requesterId;
+    const closerObj = closerUserId ? db.getUser(closerUserId) : requester;
+    const closerName = closerObj ? closerObj.name : (closerUserId || requesterName);
+    const closerRole = closerObj ? (closerObj.position || closerObj.role || 'Requester') : 'Requester';
+    const closedAtTime = req.closedAt || closeEvent?.timestamp || (req.status === 'Completed' || req.status === 'Pending Verification' ? (req.actualEndDate || req.endDate) : null);
+
+    // Verifier details
+    const verifierUserId = req.verifiedBy || verifyEvent?.userId || req.approverId;
+    const verifierObj = verifierUserId ? db.getUser(verifierUserId) : approverObj;
+    const verifierName = verifierObj ? verifierObj.name : (verifierUserId || approverName);
+    const verifierRole = verifierObj ? (verifierObj.position || verifierObj.role || 'Superior') : 'Superior';
+    const verifiedAtTime = req.verifiedAt || verifyEvent?.timestamp || (req.status === 'Completed' ? (req.closedAt || req.actualEndDate) : null);
+
+    const isScheduleApproved = req.status === 'Approved' || req.status === 'Pending Verification' || req.status === 'Completed';
+    const isScheduleRejected = req.status === 'Rejected';
+    const isClosed = req.status === 'Completed' || req.status === 'Pending Verification' || Boolean(req.closedAt || req.actualStartDate);
+    const isCancelled = req.status === 'Cancelled';
+    const isVerified = req.status === 'Completed' && req.verificationStatus !== 'Rejected';
+    const isPendingVerification = req.status === 'Pending Verification';
+    const isActualsRejected = req.verificationStatus === 'Rejected';
+
+    // Build Stage Badges
+    const stage2Badge = isScheduleApproved
+        ? `<span class="badge badge-approved" style="font-size:0.7rem;">${icons.check} Schedule Approved</span>`
+        : (isScheduleRejected ? `<span class="badge badge-rejected" style="font-size:0.7rem;">${icons.times} Rejected</span>` : `<span class="badge badge-pending" style="font-size:0.7rem;">Pending Decision</span>`);
+
+    const stage3Badge = isClosed
+        ? `<span class="badge badge-approved" style="font-size:0.7rem;">${icons.check} Actuals Submitted</span>`
+        : (isCancelled ? `<span class="badge badge-rejected" style="font-size:0.7rem;">${icons.times} Cancelled</span>` : `<span class="badge" style="background:#f1f5f9; color:#64748b; font-size:0.7rem;">In Progress</span>`);
+
+    const stage4Badge = isVerified
+        ? `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; font-size:0.7rem;">${icons.check} Verified &amp; Finalized</span>`
+        : (isPendingVerification ? `<span class="badge badge-pending" style="background:#fffbeb; color:#b45309; border:1px solid #fde68a; font-size:0.7rem;">Pending Verification</span>` : (isActualsRejected ? `<span class="badge badge-rejected" style="font-size:0.7rem;">Actuals Disputed</span>` : `<span class="badge" style="background:#f1f5f9; color:#64748b; font-size:0.7rem;">Pending Completion</span>`));
+
+    let contentHtml = `
+        <!-- Top Status Banner -->
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#f8fafc; border:1px solid var(--border-color); border-radius:10px; padding:10px 14px;">
+            <div>
+                <span style="font-size:0.72rem; text-transform:uppercase; font-weight:700; color:var(--text-muted); letter-spacing:0.4px;">Current Workflow Status:</span>
+                <div style="font-weight:700; font-size:0.98rem; color:var(--text-main); margin-top:2px;">
+                    ${project ? project.name : (req.project || 'Project')} &bull; ${req.id}
+                </div>
+            </div>
+            <div>${statusBadge}</div>
+        </div>
+
+        <!-- STAGE 1: Request Detail -->
+        <div style="background:#ffffff; border:1.5px solid #e2e8f0; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9; padding-bottom:8px; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.92rem; color:var(--primary);">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:rgba(99,102,241,0.12); color:var(--primary); font-size:0.75rem; font-weight:800;">1</span>
+                    Initial Overtime Request Details
+                </div>
+                <span class="badge badge-info" style="font-size:0.68rem;">Submitted</span>
+            </div>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:0.83rem;">
+                <div><span style="color:var(--text-muted);">Requested By:</span><br><strong>${requesterName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${requesterRole})</span></div>
+                <div><span style="color:var(--text-muted);">Contact / Email:</span><br>${requesterEmail || 'N/A'}</div>
+                <div><span style="color:var(--text-muted);">Assigned Approver:</span><br><strong>${approverName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${approverRole})</span></div>
+                <div><span style="color:var(--text-muted);">Proposed Schedule:</span><br><strong>${formatDateTime(req.startDate || req.dateStart)}</strong> &rarr; <strong>${formatDateTime(req.endDate || req.dateEnd)}</strong></div>
+                <div><span style="color:var(--text-muted);">Estimated Duration:</span><br><strong style="color:var(--primary); font-size:0.95rem;">${Number(req.duration || 0).toFixed(1)} hrs</strong></div>
+                <div><span style="color:var(--text-muted);">Collaborating Workers:</span><br>${teamNames}</div>
+                <div style="grid-column: 1 / -1;"><span style="color:var(--text-muted);">Target Deliverables:</span><br><strong>${req.targetWork || 'N/A'}</strong></div>
+                <div style="grid-column: 1 / -1;"><span style="color:var(--text-muted);">Work Progress / Justification:</span><br>${req.workProgress || 'N/A'}</div>
+            </div>
+        </div>
+
+        <!-- STAGE 2: Approved / Rejected Detail with Comments -->
+        <div style="background:#ffffff; border:1.5px solid ${isScheduleApproved ? '#bbf7d0' : (isScheduleRejected ? '#fecaca' : '#e2e8f0')}; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9; padding-bottom:8px; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.92rem; color:${isScheduleApproved ? '#166534' : (isScheduleRejected ? '#991b1b' : 'var(--text-main)')};">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${isScheduleApproved ? '#dcfce7' : (isScheduleRejected ? '#fee2e2' : '#f1f5f9')}; font-size:0.75rem; font-weight:800;">2</span>
+                    Schedule Approval / Decision
+                </div>
+                <div>${stage2Badge}</div>
+            </div>
+            ${isScheduleApproved ? `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:0.83rem;">
+                    <div><span style="color:var(--text-muted);">Approved By:</span><br><strong>${approverName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${approverRole})</span></div>
+                    <div><span style="color:var(--text-muted);">Decision Time:</span><br>${approvedAtTime ? formatDateTime(approvedAtTime) : 'N/A'}</div>
+                    <div><span style="color:var(--text-muted);">Authorized Shift Duration:</span><br><strong style="color:#166534; font-size:0.95rem;">${Number(req.duration || 0).toFixed(1)} hrs</strong></div>
+                </div>
+                <div style="background:rgba(99,102,241,0.06); border:1px solid rgba(99,102,241,0.2); border-radius:8px; padding:10px 12px; margin-top:10px; font-size:0.84rem;">
+                    <strong style="color:var(--primary); font-size:0.82rem;">💬 Approver Remarks &amp; Instructions:</strong>
+                    <div style="margin-top:3px; font-style:${req.approverRemarks ? 'normal' : 'italic'}; color:${req.approverRemarks ? 'var(--text-main)' : 'var(--text-muted)'};">
+                        "${req.approverRemarks || 'No instructions or remarks provided.'}"
+                    </div>
+                </div>
+            ` : (isScheduleRejected ? `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:0.83rem;">
+                    <div><span style="color:var(--text-muted);">Rejected By:</span><br><strong>${approverName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${approverRole})</span></div>
+                    <div><span style="color:var(--text-muted);">Decision Time:</span><br>${approvedAtTime ? formatDateTime(approvedAtTime) : 'N/A'}</div>
+                </div>
+                <div style="background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:10px 12px; margin-top:10px; font-size:0.84rem; color:#dc2626;">
+                    <strong style="font-size:0.82rem;">❌ Rejection Reason:</strong>
+                    <div style="margin-top:3px;">"${req.rejectionReason || 'No reason specified.'}"</div>
+                </div>
+            ` : `
+                <div style="font-size:0.83rem; color:var(--text-muted); font-style:italic;">
+                    Awaiting schedule approval by superior or administrator.
+                </div>
+            `)}
+
+            ${(isApproverOrAdmin && req.status === 'Pending Approval') ? `
+                <!-- Inline Approver Controls for Pending Schedule -->
+                <div style="border-top:1px dashed #cbd5e1; margin-top:12px; padding-top:12px;">
+                    <label style="font-weight:700; font-size:0.86rem; color:var(--text-main); margin-bottom:8px; display:block;">
+                        Adjust Proposed Overtime Schedule (Optional)
+                    </label>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:8px;">
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="rev-date-start" style="font-size:0.74rem; font-weight:600;">Date Start</label>
+                            <input type="date" id="rev-date-start" value="${defaultDateStart}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="rev-time-start" style="font-size:0.74rem; font-weight:600;">Time Start</label>
+                            <input type="time" id="rev-time-start" value="${defaultTimeStart}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="rev-date-end" style="font-size:0.74rem; font-weight:600;">Date End</label>
+                            <input type="date" id="rev-date-end" value="${defaultDateEnd}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;">
+                        </div>
+                        <div class="form-group" style="margin-bottom:0;">
+                            <label for="rev-time-end" style="font-size:0.74rem; font-weight:600;">Time End</label>
+                            <input type="time" id="rev-time-end" value="${defaultTimeEnd}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;">
+                        </div>
+                    </div>
+                    <div id="rev-compliance-indicator"></div>
+
+                    <div class="form-group" style="margin-top:8px; margin-bottom:8px;">
+                        <label for="rev-approver-remarks" style="font-weight:700; font-size:0.82rem; color:var(--text-main);">
+                            Approver Remarks / Instructions for Worker:
+                        </label>
+                        <textarea id="rev-approver-remarks" placeholder="Add approval remarks or instructions for the worker..." style="min-height:55px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;">${req.approverRemarks || ''}</textarea>
+                    </div>
+
+                    <div class="form-group" id="rev-reject-container" style="display:none; background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:10px; margin-bottom:8px;">
+                        <label for="rev-rejection-reason" style="font-weight:700; font-size:0.82rem; color:#dc2626;">Mandatory Reason for Rejection:</label>
+                        <textarea id="rev-rejection-reason" placeholder="Please specify why this overtime request is being rejected..." style="min-height:50px; font-size:0.82rem; background:#fff !important; color:#0f172a !important; margin-top:3px;"></textarea>
+                    </div>
+
+                    <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+                        <button type="button" class="btn btn-danger btn-sm" id="rev-btn-reject">Reject Request</button>
+                        <button type="button" class="btn btn-success btn-sm" id="rev-btn-approve" style="font-weight:700;">Approve Schedule</button>
+                    </div>
+                </div>
+            ` : ''}
+        </div>
+
+        <!-- STAGE 3: Close OT Detail with Comments -->
+        <div style="background:#ffffff; border:1.5px solid ${isClosed ? '#bbf7d0' : (isCancelled ? '#fecaca' : '#e2e8f0')}; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9; padding-bottom:8px; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.92rem; color:${isClosed ? '#166534' : 'var(--text-main)'};">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${isClosed ? '#dcfce7' : '#f1f5f9'}; font-size:0.75rem; font-weight:800;">3</span>
+                    Work Completion &amp; Actuals Closeout
+                </div>
+                <div>${stage3Badge}</div>
+            </div>
+            ${isClosed ? `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:0.83rem;">
+                    <div><span style="color:var(--text-muted);">Closed By:</span><br><strong>${closerName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${closerRole})</span></div>
+                    <div><span style="color:var(--text-muted);">Closed At:</span><br>${closedAtTime ? formatDateTime(closedAtTime) : 'N/A'}</div>
+                    <div><span style="color:var(--text-muted);">Actual Start:</span><br><strong>${formatDateTime(req.actualStartDate || req.startDate)}</strong></div>
+                    <div><span style="color:var(--text-muted);">Actual End:</span><br><strong>${formatDateTime(req.actualEndDate || req.endDate)}</strong></div>
+                    <div><span style="color:var(--text-muted);">Gross Work Time:</span><br>${Number(req.actualGrossDuration || req.grossDuration || req.duration || 0).toFixed(1)} hrs</div>
+                    <div><span style="color:var(--text-muted);">Rest Break Deducted:</span><br>-${Number(req.actualRestDeduction || 0).toFixed(1)} hrs</div>
+                    <div><span style="color:var(--text-muted);">Reported Net Actual:</span><br><strong style="color:var(--primary); font-size:0.95rem;">${Number(req.actualDuration || req.duration || 0).toFixed(1)} hrs</strong></div>
+                </div>
+                <div style="background:rgba(16,185,129,0.06); border:1px solid rgba(16,185,129,0.2); border-radius:8px; padding:10px 12px; margin-top:10px; font-size:0.84rem;">
+                    <strong style="color:#166534; font-size:0.82rem;">💬 Worker's Completion Comments:</strong>
+                    <div style="margin-top:3px; font-style:${req.closingRemarks ? 'normal' : 'italic'}; color:${req.closingRemarks ? '#14532d' : 'var(--text-muted)'};">
+                        "${req.closingRemarks || 'No completion remarks provided.'}"
+                    </div>
+                </div>
+            ` : (isCancelled ? `
+                <div style="font-size:0.83rem; color:#991b1b;">
+                    <div><strong>Shift Status:</strong> Cancelled (Work did not proceed)</div>
+                    ${req.closingRemarks || req.cancellationReason ? `
+                        <div style="background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:8px 12px; margin-top:6px;">
+                            <strong>💬 Cancellation Reason:</strong> "${req.closingRemarks || req.cancellationReason}"
+                        </div>
+                    ` : ''}
+                </div>
+            ` : `
+                <div style="font-size:0.83rem; color:var(--text-muted); font-style:italic;">
+                    Overtime shift has not been closed yet. Worker will submit actual times once work is finished.
+                </div>
+            `)}
+        </div>
+
+        <!-- STAGE 4: Approved / Reject Close OT with Comments (Verification) -->
+        <div style="background:#ffffff; border:1.5px solid ${isVerified ? '#a7f3d0' : (isPendingVerification ? '#fde68a' : (isActualsRejected ? '#fecaca' : '#e2e8f0'))}; border-radius:12px; padding:14px 16px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #f1f5f9; padding-bottom:8px; margin-bottom:10px;">
+                <div style="display:flex; align-items:center; gap:8px; font-weight:700; font-size:0.92rem; color:${isVerified ? '#065f46' : (isPendingVerification ? '#b45309' : (isActualsRejected ? '#991b1b' : 'var(--text-main)'))};">
+                    <span style="display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:${isVerified ? '#d1fae5' : (isPendingVerification ? '#fef3c7' : '#f1f5f9')}; font-size:0.75rem; font-weight:800;">4</span>
+                    Superior Actuals Verification &amp; Final Authorization
+                </div>
+                <div>${stage4Badge}</div>
+            </div>
+            ${isVerified ? `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:0.83rem;">
+                    <div><span style="color:var(--text-muted);">Verified By:</span><br><strong>${verifierName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${verifierRole})</span></div>
+                    <div><span style="color:var(--text-muted);">Verified Date &amp; Time:</span><br>${verifiedAtTime ? formatDateTime(verifiedAtTime) : 'N/A'}</div>
+                    <div><span style="color:var(--text-muted);">Final Authorized Overtime:</span><br><strong style="color:#059669; font-size:1.05rem;">${Number(req.actualDuration || req.duration || 0).toFixed(1)} hrs</strong> <span style="font-size:0.72rem; color:var(--text-muted);">(Payroll Validated)</span></div>
+                </div>
+                <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; padding:10px 12px; margin-top:10px; font-size:0.84rem;">
+                    <strong style="color:#065f46; font-size:0.82rem;">💬 Superior Verification Comments:</strong>
+                    <div style="margin-top:3px; font-style:${req.verificationRemarks ? 'normal' : 'italic'}; color:${req.verificationRemarks ? '#065f46' : 'var(--text-muted)'};">
+                        "${req.verificationRemarks || 'Actual hours verified as correct and approved into official records.'}"
+                    </div>
+                </div>
+            ` : (isActualsRejected ? `
+                <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:10px; font-size:0.83rem;">
+                    <div><span style="color:var(--text-muted);">Reviewed By:</span><br><strong>${verifierName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${verifierRole})</span></div>
+                    <div><span style="color:var(--text-muted);">Decision Time:</span><br>${verifiedAtTime ? formatDateTime(verifiedAtTime) : 'N/A'}</div>
+                </div>
+                <div style="background:#fff1f2; border:1px solid #fecdd3; border-radius:8px; padding:10px 12px; margin-top:10px; font-size:0.84rem; color:#dc2626;">
+                    <strong style="font-size:0.82rem;">💬 Superior Disapproval Reason:</strong>
+                    <div style="margin-top:3px;">"${req.verificationRemarks || 'Reported actual hours disputed by superior.'}"</div>
+                </div>
+            ` : (isPendingVerification ? `
+                <div style="font-size:0.84rem; color:#b45309; margin-bottom:8px;">
+                    Worker has submitted their actual hours (${Number(req.actualDuration || req.duration || 0).toFixed(1)}h). Awaiting superior verification and sign-off.
+                </div>
+                ${isApproverOrAdmin ? `
+                    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; margin-top:8px;">
+                        <label for="rev-verify-remarks-input" style="font-weight:700; font-size:0.82rem; color:#92400e; display:block; margin-bottom:4px;">
+                            Superior Verification Comments / Feedback:
+                        </label>
+                        <textarea id="rev-verify-remarks-input" placeholder="Add verification notes or feedback for the worker..." style="width:100%; min-height:50px; border-radius:6px; border:1px solid #d97706; padding:6px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;"></textarea>
+                        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+                            <button type="button" class="btn btn-danger btn-sm" id="rev-btn-reject-actuals">Dispute / Reject Actuals</button>
+                            <button type="button" class="btn btn-success btn-sm" id="rev-btn-approve-actuals" style="font-weight:700;">✓ Verify &amp; Approve Actuals</button>
+                        </div>
+                    </div>
+                ` : ''}
+            ` : `
+                <div style="font-size:0.83rem; color:var(--text-muted); font-style:italic;">
+                    Actuals verification will take place after the worker completes and closes the shift.
+                </div>
+            `))}
+        </div>
+
+        <!-- Action Footer -->
+        <div class="modal-footer" style="margin-top:14px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <div>
+                ${isSuperAdmin ? `
+                    <button type="button" class="btn btn-danger btn-sm" id="rev-btn-sa-delete" style="font-size:0.75rem; padding:5px 10px;">
+                        Delete Record
+                    </button>
+                ` : ''}
+            </div>
+            <div style="display:flex; gap:8px;">
+                ${isSuperAdmin ? `
+                    <button type="button" class="btn btn-primary btn-sm" id="rev-btn-sa-override" style="font-weight:600; font-size:0.75rem; padding:5px 12px; background:#4f46e5;">
+                        Override / Edit OT
+                    </button>
+                ` : ''}
+                ${(req.status === 'Approved' && (req.requesterId === currentUser?.id || (currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')))) ? `
+                    <button type="button" class="btn btn-success" id="rev-btn-close-ot" style="font-weight:700;">Close OT &amp; Submit Actuals</button>
+                ` : ''}
+                <button type="button" class="btn btn-secondary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Close</button>
             </div>
         </div>
     `;
-
-    // Display existing approver remarks or rejection notes
-    if (req.approverRemarks) {
-        contentHtml += `
-            <div style="background: rgba(99, 102, 241, 0.06); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 10px; padding: 12px 14px; font-size: 0.88rem; color: var(--text-main);">
-                <strong style="color: var(--primary);">${icons.info} Approver Remarks & Instructions:</strong>
-                <div style="margin-top: 4px;">${req.approverRemarks}</div>
-            </div>
-        `;
-    }
-    if (req.status === 'Rejected' && req.rejectionReason) {
-        contentHtml += `
-            <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 10px; padding: 12px 14px; font-size: 0.88rem; color: #dc2626;">
-                <strong>${icons.times} Rejection Reason:</strong>
-                <div style="margin-top: 4px;">${req.rejectionReason}</div>
-            </div>
-        `;
-    }
-
-    if (req.status === 'Cancelled') {
-        contentHtml += `
-            <div style="background: #fff1f2; border: 1.5px solid #fecdd3; border-radius: 10px; padding: 14px; font-size: 0.88rem; color: #991b1b;">
-                <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    ${icons.times} Overtime Shift Cancelled (Work Did Not Proceed)
-                </div>
-                <div style="background: #ffffff; border: 1px solid #fecdd3; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <span style="font-weight: 600;">Recorded Claimable Overtime:</span>
-                    <span style="font-weight: 800; font-size: 1.1rem; color: #dc2626;">0.0 hrs</span>
-                </div>
-                ${req.closingRemarks || req.cancellationReason ? `
-                    <div style="margin-top: 6px; font-size: 0.82rem;">
-                        <strong>Cancellation Reason / Remarks:</strong> "${req.closingRemarks || req.cancellationReason}"
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    if (req.status === 'Completed') {
-        contentHtml += `
-            <div style="background: #ecfdf5; border: 1.5px solid #a7f3d0; border-radius: 10px; padding: 14px; font-size: 0.88rem; color: #065f46;">
-                <div style="font-weight: 700; font-size: 0.95rem; margin-bottom: 6px; display: flex; align-items: center; gap: 6px;">
-                    ${icons.check} Actual Work Completion Summary (Closed Shift)
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 0.82rem; margin-bottom: 8px;">
-                    <div>Actual Start: <strong>${formatDateTime(req.actualStartDate || req.startDate)}</strong></div>
-                    <div>Actual End: <strong>${formatDateTime(req.actualEndDate || req.endDate)}</strong></div>
-                    <div>Gross Working Time: <strong>${Number(req.actualGrossDuration || req.grossDuration || req.duration).toFixed(1)} hrs</strong></div>
-                    <div>Rest Break Deducted: <strong>-${Number(req.actualRestDeduction || 0).toFixed(1)} hrs</strong></div>
-                </div>
-                <div style="background: #ffffff; border: 1px solid #a7f3d0; border-radius: 8px; padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
-                    <span style="font-weight: 600;">Final Claimable Overtime:</span>
-                    <span style="font-weight: 800; font-size: 1.1rem; color: #059669;">${Number(req.actualDuration || req.duration).toFixed(1)} hrs</span>
-                </div>
-                ${req.closingRemarks ? `
-                    <div style="margin-top: 8px; font-size: 0.82rem;">
-                        <strong>Completion Remarks:</strong> "${req.closingRemarks}"
-                    </div>
-                ` : ''}
-            </div>
-        `;
-    }
-
-    if (isApproverOrAdmin && req.status === 'Pending Approval') {
-        contentHtml += `
-            <!-- Approver Controls: Adjust Schedule -->
-            <div style="border-top: 1px solid var(--border-color); padding-top: 14px;">
-                <label style="font-weight: 700; font-size: 0.92rem; color: var(--text-main); margin-bottom: 8px; display: flex; align-items: center; gap: 8px;">
-                    <span style="display:inline-flex; width:18px; height:18px; color:var(--primary);">${icons.assignment}</span> Adjust Proposed Overtime Schedule (Optional)
-                </label>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; margin-bottom: 10px;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="rev-date-start" style="font-size: 0.78rem; font-weight: 600;">Date Start</label>
-                        <input type="date" id="rev-date-start" value="${defaultDateStart}" style="padding: 6px 10px; font-size: 0.85rem; background:#fff !important; color:#0f172a !important;">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="rev-time-start" style="font-size: 0.78rem; font-weight: 600;">Time Start</label>
-                        <input type="time" id="rev-time-start" value="${defaultTimeStart}" style="padding: 6px 10px; font-size: 0.85rem; background:#fff !important; color:#0f172a !important;">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="rev-date-end" style="font-size: 0.78rem; font-weight: 600;">Date End</label>
-                        <input type="date" id="rev-date-end" value="${defaultDateEnd}" style="padding: 6px 10px; font-size: 0.85rem; background:#fff !important; color:#0f172a !important;">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label for="rev-time-end" style="font-size: 0.78rem; font-weight: 600;">Time End</label>
-                        <input type="time" id="rev-time-end" value="${defaultTimeEnd}" style="padding: 6px 10px; font-size: 0.85rem; background:#fff !important; color:#0f172a !important;">
-                    </div>
-                </div>
-                <div id="rev-compliance-indicator"></div>
-            </div>
-
-            <!-- Approver Remarks / Notes for Requester -->
-            <div class="form-group" style="margin-bottom: 0;">
-                <label for="rev-approver-remarks" style="font-weight: 700; font-size: 0.92rem; color: var(--text-main);">
-                    Approver Remarks & Instructions (Notes for Worker)
-                </label>
-                <textarea id="rev-approver-remarks" placeholder="Add approval remarks or instructions for the worker..." style="min-height: 70px; background:#fff !important; color:#0f172a !important;">${req.approverRemarks || ''}</textarea>
-            </div>
-
-            <!-- Rejection Reason Input (Visible if rejecting) -->
-            <div class="form-group" id="rev-reject-container" style="display: none; margin-bottom: 0; background: #fff1f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 12px;">
-                <label for="rev-rejection-reason" style="font-weight: 700; font-size: 0.88rem; color: #dc2626;">
-                    Mandatory Reason for Rejection
-                </label>
-                <textarea id="rev-rejection-reason" placeholder="Please specify why this overtime request is being rejected..." style="min-height: 60px; background:#fff !important; color:#0f172a !important; margin-top: 4px;"></textarea>
-            </div>
-
-            <!-- Action Buttons -->
-            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div>
-                    ${isSuperAdmin ? `
-                        <button type="button" class="btn btn-danger btn-sm" id="rev-btn-sa-delete" style="font-size:0.75rem; padding: 5px 10px;">
-                            Delete Record
-                        </button>
-                    ` : ''}
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    ${isSuperAdmin ? `
-                        <button type="button" class="btn btn-primary btn-sm" id="rev-btn-sa-override" style="font-weight:600; font-size:0.75rem; padding: 5px 12px; background:#4f46e5;">
-                            Override / Edit OT
-                        </button>
-                    ` : ''}
-                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Cancel</button>
-                    <button type="button" class="btn btn-danger" id="rev-btn-reject">Reject Request</button>
-                    <button type="button" class="btn btn-success" id="rev-btn-approve">Approve Request</button>
-                </div>
-            </div>
-        `;
-    } else {
-        const canClose = req.status === 'Approved' && (req.requesterId === currentUser?.id || (currentUser && (currentUser.role === 'admin' || currentUser.role === 'superadmin')));
-        contentHtml += `
-            <div class="modal-footer" style="margin-top: 14px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-                <div>
-                    ${isSuperAdmin ? `
-                        <button type="button" class="btn btn-danger btn-sm" id="rev-btn-sa-delete" style="font-size:0.75rem; padding: 5px 10px;">
-                            Delete Record
-                        </button>
-                    ` : ''}
-                </div>
-                <div style="display: flex; gap: 8px;">
-                    ${isSuperAdmin ? `
-                        <button type="button" class="btn btn-primary btn-sm" id="rev-btn-sa-override" style="font-weight:600; font-size:0.75rem; padding: 5px 12px; background:#4f46e5;">
-                            Override / Edit OT
-                        </button>
-                    ` : ''}
-                    ${canClose ? `<button type="button" class="btn btn-success" id="rev-btn-close-ot" style="font-weight:700;">Close OT &amp; Submit Actuals</button>` : ''}
-                    <button type="button" class="btn btn-primary" onclick="document.getElementById('review-ot-modal').classList.remove('active')">Close</button>
-                </div>
-            </div>
-        `;
-    }
 
     modalBody.innerHTML = contentHtml;
     modal.classList.add('active');
@@ -972,6 +1086,42 @@ export function openRequestReviewModal(requestId) {
             showRequestDecisionModal(updated || req, 'Rejected', () => {
                 renderActiveView();
             });
+        };
+    }
+
+    // Attach verification action handlers
+    const btnApproveActuals = document.getElementById('rev-btn-approve-actuals');
+    if (btnApproveActuals) {
+        btnApproveActuals.onclick = () => {
+            const remarks = document.getElementById('rev-verify-remarks-input')?.value || '';
+            try {
+                db.verifyOvertimeActuals(req.id, { approved: true, remarks }, currentUser.id);
+                modal.classList.remove('active');
+                showToast(`OT Record ${req.id} actuals verified & approved.`, "success");
+                renderActiveView();
+            } catch (err) {
+                showToast(err.message || "Failed to verify actuals.", "error");
+            }
+        };
+    }
+
+    const btnRejectActuals = document.getElementById('rev-btn-reject-actuals');
+    if (btnRejectActuals) {
+        btnRejectActuals.onclick = () => {
+            const remarks = document.getElementById('rev-verify-remarks-input')?.value || '';
+            if (!remarks.trim()) {
+                showToast("Please provide remarks explaining why the actual hours are rejected.", "error");
+                document.getElementById('rev-verify-remarks-input')?.focus();
+                return;
+            }
+            try {
+                db.verifyOvertimeActuals(req.id, { approved: false, remarks }, currentUser.id);
+                modal.classList.remove('active');
+                showToast(`OT Record ${req.id} actuals returned with feedback.`, "info");
+                renderActiveView();
+            } catch (err) {
+                showToast(err.message || "Failed to dispute actuals.", "error");
+            }
         };
     }
 }

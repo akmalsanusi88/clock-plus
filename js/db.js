@@ -380,6 +380,9 @@ class Database {
                 closingRemarks: r.closing_remarks || null,
                 closedAt: r.closed_at || null,
                 closedBy: r.closed_by || null,
+                verifiedAt: r.verified_at || null,
+                verifiedBy: r.verified_by || null,
+                verificationRemarks: r.verification_remarks || null,
                 history: Array.isArray(r.history) ? r.history : (typeof r.history === 'string' ? JSON.parse(r.history || '[]') : [])
             }));
 
@@ -2009,6 +2012,81 @@ class Database {
             }
         });
 
+        return newRequest;
+    }
+
+    verifyOvertimeActuals(id, { approved = true, remarks = '', adjustedDuration = null, adjustedTimeStart = null, adjustedTimeEnd = null } = {}, actionUserId) {
+        const data = this.getData();
+        const index = data.requests.findIndex(r => r.id === id);
+        if (index === -1) throw new Error(`Request ${id} not found.`);
+
+        const req = data.requests[index];
+        const user = this.getCurrentUser();
+        const actorId = actionUserId || (user ? user.id : null);
+        const actorName = user ? user.name : 'Superior';
+
+        const finalStatus = approved ? 'Completed' : 'Pending Verification';
+        const finalRemarks = remarks.trim() || (approved ? 'Actual overtime verified and approved.' : 'Actual hours disputed by superior.');
+
+        const updatedFields = {
+            status: finalStatus,
+            verificationStatus: approved ? 'Approved' : 'Rejected',
+            verifiedAt: new Date().toISOString(),
+            verifiedBy: actorId,
+            verificationRemarks: finalRemarks
+        };
+
+        if (adjustedDuration != null && !isNaN(Number(adjustedDuration))) {
+            updatedFields.actualDuration = Number(adjustedDuration);
+        }
+        if (adjustedTimeStart) updatedFields.actualTimeStart = adjustedTimeStart;
+        if (adjustedTimeEnd) updatedFields.actualTimeEnd = adjustedTimeEnd;
+
+        const newRequest = { ...req, ...updatedFields };
+        newRequest.history = newRequest.history || [];
+        newRequest.history.push({
+            timestamp: new Date().toISOString(),
+            userId: actorId,
+            action: approved 
+                ? `Verified & Finalized Overtime (${newRequest.actualDuration || newRequest.duration}h net actual). Remarks: "${finalRemarks}"`
+                : `Rejected / Disputed Actuals for Overtime. Remarks: "${finalRemarks}"`
+        });
+
+        data.requests[index] = newRequest;
+        this.saveData(data);
+
+        // Notify requester and collaborating team
+        const projName = this.getProject(newRequest.project)?.name || newRequest.project;
+        if (approved) {
+            this.createNotification(
+                newRequest.requesterId,
+                `Your actual overtime hours for ${projName} (${id}) have been verified and approved by ${actorName}. (${newRequest.actualDuration || newRequest.duration} hrs)`
+            );
+        } else {
+            this.createNotification(
+                newRequest.requesterId,
+                `Your reported overtime actuals for ${projName} (${id}) were reviewed with feedback by ${actorName}: "${finalRemarks}"`
+            );
+        }
+
+        // Supabase sync
+        supabase.from('overtime_requests').update({
+            status: finalStatus,
+            verified_by: actorId,
+            verified_at: updatedFields.verifiedAt,
+            verification_remarks: finalRemarks,
+            actual_duration: newRequest.actualDuration
+        }).eq('id', id).then(({ error }) => {
+            if (error) {
+                // Fallback for schema without verified_* columns
+                supabase.from('overtime_requests').update({
+                    status: finalStatus,
+                    actual_duration: newRequest.actualDuration
+                }).eq('id', id).catch(e => {});
+            }
+        });
+
+        window.dispatchEvent(new Event('clock_plus_db_update'));
         return newRequest;
     }
 
