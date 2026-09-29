@@ -653,7 +653,14 @@ class Database {
     }
 
     async signIn(email, password) {
+        if (!password || !password.trim()) {
+            throw new Error("Password is required.");
+        }
+
         const normalizedInput = (email || '').toLowerCase().trim();
+        if (!normalizedInput) {
+            throw new Error("Username or email is required.");
+        }
 
         // 1. Sync latest users from Supabase
         await this.syncFromSupabase();
@@ -661,75 +668,81 @@ class Database {
         // 2. Search company_users and global users with flexible smart matcher (handles email, userId, username, and mohd <-> muhd)
         const companyUsers = this.getData().company_users || [];
         const match = companyUsers.find(cu => matchesUserIdentifier(cu, normalizedInput));
-
-        // Try Supabase Auth in parallel
-        try {
-            await supabase.auth.signInWithPassword({
-                email: (match && match.email) ? match.email : normalizedInput,
-                password: password
-            });
-        } catch (e) {
-            console.warn("Supabase Auth note:", e);
-        }
-
-        if (match) {
-            const hasCustomName = match.name && match.name.trim() !== '' && match.name.toUpperCase() !== 'EMPTY' && match.name !== 'User';
-            const rawRole = (match.role || '').toLowerCase().trim();
-            let normalizedRole = 'worker';
-            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
-            else if (rawRole === 'admin') normalizedRole = 'admin';
-            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
-            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
-            else normalizedRole = 'worker';
-
-            const dataScope = match.data_scope || match.dataScope || (
-                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
-                (normalizedRole === 'superior' ? 'team' : 'own')
-            );
-
-            return {
-                id: match.userId,
-                name: hasCustomName ? match.name : (match.email || 'User'),
-                role: normalizedRole,
-                position: match.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
-                email: match.email || normalizedInput,
-                data_scope: dataScope,
-                dataScope: dataScope,
-                permissions: match.permissions
-            };
-        }
-
-        // 3. Check global users
         const globalUsers = this.getData().users || [];
-        const globalMatch = globalUsers.find(u => matchesUserIdentifier(u, normalizedInput));
+        const globalMatch = !match ? globalUsers.find(u => matchesUserIdentifier(u, normalizedInput)) : null;
 
-        if (globalMatch) {
-            const rawRole = (globalMatch.role || '').toLowerCase().trim();
-            let normalizedRole = 'worker';
-            if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
-            else if (rawRole === 'admin') normalizedRole = 'admin';
-            else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
-            else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
-            else normalizedRole = 'worker';
-
-            const dataScope = globalMatch.data_scope || globalMatch.dataScope || (
-                normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
-                (normalizedRole === 'superior' ? 'team' : 'own')
-            );
-
-            return {
-                id: globalMatch.id,
-                name: globalMatch.name || globalMatch.email || 'User',
-                role: normalizedRole,
-                position: globalMatch.position || 'Staff',
-                email: globalMatch.email || normalizedInput,
-                data_scope: dataScope,
-                dataScope: dataScope,
-                permissions: globalMatch.permissions
-            };
+        const targetUser = match || globalMatch;
+        if (!targetUser) {
+            throw new Error("Invalid username or password. Please check your credentials.");
         }
 
-        throw new Error("Invalid username or password. Please check your credentials.");
+        const targetEmail = (targetUser.email || normalizedInput).trim();
+
+        // 3. Attempt Supabase Auth login
+        let authSuccess = false;
+        let authError = null;
+
+        if (targetEmail && targetEmail.includes('@')) {
+            try {
+                const res = await supabase.auth.signInWithPassword({
+                    email: targetEmail,
+                    password: password
+                });
+                if (!res.error && res.data?.user) {
+                    authSuccess = true;
+                } else {
+                    authError = res.error;
+                }
+            } catch (e) {
+                authError = e;
+            }
+        }
+
+        // 4. Check if demo/mock fallback account (ADMIN-01, EMP-01..04, SUP-01..02)
+        const isMockDemoAccount = targetUser.id && (
+            targetUser.id.startsWith('ADMIN-0') ||
+            targetUser.id.startsWith('SUP-0') ||
+            targetUser.id.startsWith('EMP-0') ||
+            (targetEmail && targetEmail.endsWith('@clockplus.com'))
+        );
+
+        if (!authSuccess) {
+            if (isMockDemoAccount && (password === 'password123' || (targetUser.password && password === targetUser.password))) {
+                authSuccess = true;
+            } else {
+                const errorMsg = authError?.message;
+                if (errorMsg && errorMsg.toLowerCase().includes('email not confirmed')) {
+                    throw new Error("Email address has not been confirmed yet. Please check your inbox.");
+                }
+                throw new Error("Invalid username or password. Please check your credentials.");
+            }
+        }
+
+        const effectiveUser = targetUser;
+        const hasCustomName = effectiveUser.name && effectiveUser.name.trim() !== '' && effectiveUser.name.toUpperCase() !== 'EMPTY' && effectiveUser.name !== 'User';
+        const rawRole = (effectiveUser.role || '').toLowerCase().trim();
+        let normalizedRole = 'worker';
+        if (rawRole === 'superadmin' || rawRole === 'super_admin' || rawRole === 'owner') normalizedRole = 'superadmin';
+        else if (rawRole === 'admin') normalizedRole = 'admin';
+        else if (rawRole === 'superior' || rawRole === 'manager') normalizedRole = 'superior';
+        else if (rawRole === 'supervisor' || rawRole === 'coordinator') normalizedRole = 'supervisor';
+        else normalizedRole = 'worker';
+
+        const dataScope = effectiveUser.data_scope || effectiveUser.dataScope || (
+            normalizedRole === 'superadmin' || normalizedRole === 'admin' ? 'global' :
+            (normalizedRole === 'superior' ? 'team' : 'own')
+        );
+
+        return {
+            id: effectiveUser.userId || effectiveUser.id,
+            name: hasCustomName ? effectiveUser.name : (effectiveUser.email || 'User'),
+            role: normalizedRole,
+            position: effectiveUser.position || (normalizedRole === 'admin' ? 'Administrator' : 'Staff'),
+            email: effectiveUser.email || normalizedInput,
+            data_scope: dataScope,
+            dataScope: dataScope,
+            permissions: effectiveUser.permissions
+        };
     }
 
     getCurrentUser() {
