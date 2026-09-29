@@ -152,9 +152,13 @@ function renderCompanies() {
     const backBtn = document.getElementById('company-back-btn');
     if (backBtn) {
         backBtn.onclick = () => {
-            localStorage.removeItem('clock_plus_session_user_id');
-            state.currentUser = null;
-            setStage('auth');
+            if (state.currentCompany) {
+                setStage('app');
+            } else {
+                localStorage.removeItem('clock_plus_session_user_id');
+                state.currentUser = null;
+                setStage('auth');
+            }
         };
     }
 }
@@ -297,7 +301,8 @@ function renderNavigation(user) {
         if (switchCoBtn) {
             switchCoBtn.onclick = () => {
                 closeBubbleMenu();
-                setAppStage('company');
+                renderCompanies();
+                setStage('company');
             };
         }
     }
