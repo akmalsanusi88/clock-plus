@@ -11,6 +11,74 @@ const state = {
     currentView: 'dashboard' // dashboard, admin, superior, worker
 };
 
+// Session Security & Lifecycle Management
+const SESSION_INACTIVITY_LIMIT_MS = 60 * 60 * 1000; // 60 minutes max inactivity
+
+function clearSessionData() {
+    sessionStorage.removeItem('clock_plus_tab_session_active');
+    sessionStorage.removeItem('clock_plus_last_activity');
+    localStorage.removeItem('clock_plus_session_user_id');
+    localStorage.removeItem('clock_plus_session_user_email');
+    localStorage.removeItem('clock_plus_session_company');
+    localStorage.removeItem('clock_plus_session_company_id');
+    localStorage.removeItem('clock_plus_last_view');
+    state.currentUser = null;
+    state.currentCompany = null;
+    try {
+        if (window.supabase && supabase.auth) {
+            supabase.auth.signOut().then();
+        }
+    } catch (e) {}
+}
+
+function checkSessionActive() {
+    const isSessionActive = sessionStorage.getItem('clock_plus_tab_session_active') === 'true';
+    if (!isSessionActive) {
+        clearSessionData();
+        return false;
+    }
+
+    const lastActiveStr = sessionStorage.getItem('clock_plus_last_activity');
+    if (lastActiveStr) {
+        const lastActive = parseInt(lastActiveStr, 10);
+        if (!isNaN(lastActive) && (Date.now() - lastActive > SESSION_INACTIVITY_LIMIT_MS)) {
+            clearSessionData();
+            showToast("Session expired due to inactivity. Please sign in again.", "info");
+            return false;
+        }
+    }
+
+    // Refresh last activity timestamp
+    sessionStorage.setItem('clock_plus_last_activity', Date.now().toString());
+    return true;
+}
+
+function initSessionActivityMonitoring() {
+    let activityThrottleTimer = null;
+    const updateActivity = () => {
+        if (!activityThrottleTimer) {
+            if (sessionStorage.getItem('clock_plus_tab_session_active') === 'true') {
+                sessionStorage.setItem('clock_plus_last_activity', Date.now().toString());
+            }
+            activityThrottleTimer = setTimeout(() => {
+                activityThrottleTimer = null;
+            }, 15000);
+        }
+    };
+
+    ['click', 'touchstart', 'keydown', 'scroll'].forEach(evt => {
+        window.addEventListener(evt, updateActivity, { passive: true });
+    });
+
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && state.currentUser) {
+            if (!checkSessionActive()) {
+                setStage('auth');
+            }
+        }
+    });
+}
+
 // Initialize Application
 document.addEventListener('DOMContentLoaded', async () => {
     window.db = db;
@@ -20,11 +88,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     initNotificationSystem();
     initResponsiveNav();
     initLoginScreen(); // Bind submit event immediately on page load
+    initSessionActivityMonitoring();
 
-    // If an active session exists in localStorage, immediately remain in app stage
-    const existingUserId = localStorage.getItem('clock_plus_session_user_id');
-    if (existingUserId) {
-        setStage('app');
+    // Verify if there is an active session in this tab/window
+    if (!checkSessionActive()) {
+        setStage('auth');
+        return;
     }
 
     const trySessionRestore = async () => {
@@ -56,6 +125,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Only show login screen if no session exists
+        clearSessionData();
         setStage('auth');
         return false;
     };
@@ -64,8 +134,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.addEventListener('clock_plus_db_update', () => {
         renderCompanies();
-        if (!state.currentUser && !restored && !localStorage.getItem('clock_plus_session_user_id')) {
+        const isSessionActive = sessionStorage.getItem('clock_plus_tab_session_active') === 'true';
+        if (!isSessionActive || !state.currentUser) {
             setStage('auth');
+        } else if (!state.currentCompany) {
+            setStage('company');
         }
     });
 });
@@ -96,6 +169,8 @@ function initLoginScreen() {
             try {
                 const user = await db.signIn(username, password);
                 state.currentUser = user;
+                sessionStorage.setItem('clock_plus_tab_session_active', 'true');
+                sessionStorage.setItem('clock_plus_last_activity', Date.now().toString());
                 localStorage.setItem('clock_plus_session_user_id', user.id);
                 renderCompanies();
                 setStage('company');
@@ -155,8 +230,7 @@ function renderCompanies() {
             if (state.currentCompany) {
                 setStage('app');
             } else {
-                localStorage.removeItem('clock_plus_session_user_id');
-                state.currentUser = null;
+                clearSessionData();
                 setStage('auth');
             }
         };
@@ -165,16 +239,7 @@ function renderCompanies() {
 
 // Logout controller
 function logout() {
-    localStorage.removeItem('clock_plus_session_user_id');
-    localStorage.removeItem('clock_plus_session_user_email');
-    localStorage.removeItem('clock_plus_session_company');
-    localStorage.removeItem('clock_plus_session_company_id');
-    localStorage.removeItem('clock_plus_last_view');
-    state.currentUser = null;
-    state.currentCompany = null;
-    try {
-        supabase.auth.signOut().then();
-    } catch (e) {}
+    clearSessionData();
     setStage('auth');
     showToast("Signed out successfully.", "info");
 }
