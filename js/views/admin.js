@@ -915,6 +915,7 @@ export function renderAdminReport(container) {
     const users = db.getUsers();
     const allRequests = db.getRequests();
     const currentUser = db.getCurrentUser();
+    const currentUserId = currentUser ? currentUser.id : null;
     const currentRole = (currentUser?.role || 'worker').toLowerCase().trim();
     const isSuperAdmin = currentRole === 'superadmin';
     const isGlobalAdmin = currentRole === 'superadmin' || currentRole === 'admin';
