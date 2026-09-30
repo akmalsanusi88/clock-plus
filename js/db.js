@@ -1,7 +1,7 @@
 // Clock+ Client-Side Relational Database Module
 // Stores application state in localStorage with seed data.
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
-import { generateNewRequestEmailHtml, generateStatusUpdateEmailHtml, generateClosedOtEmailHtml } from './views/shared.js';
+import { generateNewRequestEmailHtml, generateStatusUpdateEmailHtml, generateClosedOtEmailHtml, generateVerifiedOtEmailHtml } from './views/shared.js';
 
 const DB_KEY = 'clock_plus_db';
 const supabaseUrl = 'https://dkxjlhpiaignyqbbxyxu.supabase.co';
@@ -1750,7 +1750,7 @@ class Database {
                 );
             });
 
-            // Email notification to Approver(s)
+            // Email notification to Requester and Approver(s)
             try {
                 const activeCoId = activeCompanyId || (this.getCompanies()[0]?.id);
                 const emailSettings = this.getCompanyEmailSettings(activeCoId);
@@ -1760,7 +1760,12 @@ class Database {
                         .map(aid => this.getUser(aid)?.email)
                         .filter(Boolean);
 
-                    if (approverEmails.length > 0) {
+                    const recipients = [...approverEmails];
+                    if (reqUser?.email && !recipients.includes(reqUser.email)) {
+                        recipients.push(reqUser.email);
+                    }
+
+                    if (recipients.length > 0) {
                         const primaryApprover = this.getUser(Array.from(approverIds)[0]);
                         const emailHtml = generateNewRequestEmailHtml({
                             req: newRequest,
@@ -1771,8 +1776,8 @@ class Database {
                         });
                         this.sendNotificationEmail({
                             companyId: activeCoId,
-                            to: approverEmails,
-                            subject: `[Clock+] New OT Request (${newId}) from ${reqUser ? reqUser.name : 'Worker'}`,
+                            to: recipients,
+                            subject: `[Clock+] New OT Request (${newId}) - ${projName}`,
                             htmlBody: emailHtml
                         }).catch(e => console.warn("Email dispatch error:", e));
                     }
@@ -1864,7 +1869,7 @@ class Database {
             }
         }
 
-        // Email status update notification to worker
+        // Email status update notification to worker and all participating team members
         try {
             const activeCoId = newRequest.companyId || localStorage.getItem('clock_plus_session_company_id') || (this.getCompanies()[0]?.id);
             const emailSettings = this.getCompanyEmailSettings(activeCoId);
@@ -1875,10 +1880,21 @@ class Database {
                 const status = actionText.includes('Rejected') ? 'Rejected' : 'Approved';
                 const remarks = actionText.includes('Rejected') ? newRequest.rejectionReason : newRequest.approverRemarks;
 
-                if (workerUser && workerUser.email) {
+                const recipients = [];
+                if (workerUser?.email) recipients.push(workerUser.email);
+                if (Array.isArray(newRequest.teamMembers)) {
+                    newRequest.teamMembers.forEach(tid => {
+                        const mUser = this.getUser(tid);
+                        if (mUser?.email && !recipients.includes(mUser.email)) {
+                            recipients.push(mUser.email);
+                        }
+                    });
+                }
+
+                if (recipients.length > 0) {
                     const emailHtml = generateStatusUpdateEmailHtml({
                         req: newRequest,
-                        workerName: workerUser.name || 'Worker',
+                        workerName: workerUser ? workerUser.name : 'Worker',
                         status: status,
                         approverName: approverUser ? approverUser.name : 'Approver',
                         remarks: remarks,
@@ -1886,7 +1902,7 @@ class Database {
                     });
                     this.sendNotificationEmail({
                         companyId: activeCoId,
-                        to: workerUser.email,
+                        to: recipients,
                         subject: `[Clock+] OT Request ${id} ${status}`,
                         htmlBody: emailHtml
                     }).catch(e => console.warn("Email status update error:", e));
@@ -1925,7 +1941,7 @@ class Database {
         const actorName = user ? user.name : 'Requester';
 
         const updatedFields = {
-            status: 'Completed',
+            status: 'Pending Verification',
             actualStartDate: closeoutData.actualStartDate || req.startDate,
             actualEndDate: closeoutData.actualEndDate || req.endDate,
             actualTimeStart: closeoutData.actualTimeStart || req.timeStart,
@@ -1945,13 +1961,13 @@ class Database {
         newRequest.history.push({
             timestamp: new Date().toISOString(),
             userId: actorId,
-            action: `Closed & Completed Overtime (${updatedFields.actualDuration}h net actual). Remarks: "${updatedFields.closingRemarks || 'None'}"`
+            action: `Closed Overtime shift (${updatedFields.actualDuration}h net actual). Awaiting superior verification. Remarks: "${updatedFields.closingRemarks || 'None'}"`
         });
 
         data.requests[index] = newRequest;
         this.saveData(data);
 
-        // Notify Approver / Superior that work was completed and closed
+        // Notify Approver / Superior that work was completed, closed and awaits verification
         const approverIds = new Set();
         if (req.approverId) approverIds.add(req.approverId);
         const hierApprovers = this.getApproversForWorker(req.requesterId);
@@ -1964,16 +1980,16 @@ class Database {
             if (targetId !== actorId) {
                 this.createNotification(
                     targetId,
-                    `${actorName} has closed and completed Overtime shift (${id}) on ${projName} with ${updatedFields.actualDuration}h actual claimable time.`
+                    `Worker ${actorName} has closed OT shift (${id}) on ${projName} with ${updatedFields.actualDuration}h net actual. Pending your verification.`
                 );
             }
         });
 
-        // Email notification on closeout & finalization
+        // Email notification on closeout (Requester & Approver)
         try {
             const activeCoId = req.companyId || localStorage.getItem('clock_plus_session_company_id') || (this.getCompanies()[0]?.id);
             const emailSettings = this.getCompanyEmailSettings(activeCoId);
-            if (emailSettings && emailSettings.is_enabled && emailSettings.notify_on_close) {
+            if (emailSettings && emailSettings.is_enabled && (emailSettings.notify_on_close || emailSettings.notify_on_request)) {
                 const clientCompany = this.getCompany(activeCoId);
                 const workerUser = this.getUser(req.requesterId);
                 const recipients = [];
@@ -1994,7 +2010,7 @@ class Database {
                     this.sendNotificationEmail({
                         companyId: activeCoId,
                         to: recipients,
-                        subject: `[Clock+] OT Request ${id} Closed & Finalized`,
+                        subject: `[Clock+] OT Shift Closed & Awaiting Verification (${id}) - ${projName}`,
                         htmlBody: emailHtml
                     }).catch(e => console.warn("Email closeout notification error:", e));
                 }
@@ -2005,7 +2021,7 @@ class Database {
 
         // Sync to Supabase
         const sbPayload = {
-            status: 'Completed',
+            status: 'Pending Verification',
             actual_start_date: updatedFields.actualStartDate,
             actual_end_date: updatedFields.actualEndDate,
             actual_time_start: updatedFields.actualTimeStart,
@@ -2021,7 +2037,7 @@ class Database {
         supabase.from('overtime_requests').update(sbPayload).eq('id', id).then(({ error }) => {
             if (error) {
                 // If columns not added yet in Supabase, update at least status
-                supabase.from('overtime_requests').update({ status: 'Completed' }).eq('id', id).catch(e => {});
+                supabase.from('overtime_requests').update({ status: 'Pending Verification' }).eq('id', id).catch(e => {});
             }
         });
 
@@ -2070,16 +2086,68 @@ class Database {
 
         // Notify requester and collaborating team
         const projName = this.getProject(newRequest.project)?.name || newRequest.project;
-        if (approved) {
-            this.createNotification(
-                newRequest.requesterId,
-                `Your actual overtime hours for ${projName} (${id}) have been verified and approved by ${actorName}. (${newRequest.actualDuration || newRequest.duration} hrs)`
-            );
-        } else {
-            this.createNotification(
-                newRequest.requesterId,
-                `Your reported overtime actuals for ${projName} (${id}) were reviewed with feedback by ${actorName}: "${finalRemarks}"`
-            );
+        const notifyMsg = approved
+            ? `Your actual overtime hours for ${projName} (${id}) have been verified and approved by ${actorName}. (${newRequest.actualDuration || newRequest.duration} hrs)`
+            : `Your reported overtime actuals for ${projName} (${id}) were reviewed with feedback by ${actorName}: "${finalRemarks}"`;
+
+        this.createNotification(newRequest.requesterId, notifyMsg);
+        if (Array.isArray(newRequest.teamMembers)) {
+            newRequest.teamMembers.forEach(tid => {
+                if (tid !== newRequest.requesterId && tid !== actorId) {
+                    this.createNotification(tid, notifyMsg);
+                }
+            });
+        }
+
+        // Email notification on verification (Requester, Team Members & Superior)
+        try {
+            const activeCoId = newRequest.companyId || localStorage.getItem('clock_plus_session_company_id') || (this.getCompanies()[0]?.id);
+            const emailSettings = this.getCompanyEmailSettings(activeCoId);
+            if (emailSettings && emailSettings.is_enabled && (emailSettings.notify_on_close || emailSettings.notify_on_approval)) {
+                const clientCompany = this.getCompany(activeCoId);
+                const workerUser = this.getUser(newRequest.requesterId);
+                const verifierUser = this.getUser(actorId);
+
+                const recipients = [];
+                if (workerUser?.email) recipients.push(workerUser.email);
+                if (Array.isArray(newRequest.teamMembers)) {
+                    newRequest.teamMembers.forEach(tid => {
+                        const mUser = this.getUser(tid);
+                        if (mUser?.email && !recipients.includes(mUser.email)) {
+                            recipients.push(mUser.email);
+                        }
+                    });
+                }
+                if (verifierUser?.email && !recipients.includes(verifierUser.email)) {
+                    recipients.push(verifierUser.email);
+                }
+                if (newRequest.approverId) {
+                    const appEmail = this.getUser(newRequest.approverId)?.email;
+                    if (appEmail && !recipients.includes(appEmail)) {
+                        recipients.push(appEmail);
+                    }
+                }
+
+                if (recipients.length > 0) {
+                    const emailHtml = generateVerifiedOtEmailHtml({
+                        req: newRequest,
+                        approverName: actorName,
+                        workerName: workerUser ? workerUser.name : 'Worker',
+                        actualHours: newRequest.actualDuration,
+                        status: approved ? 'Completed' : 'Disputed',
+                        remarks: finalRemarks,
+                        clientName: clientCompany ? clientCompany.name : 'Clock+'
+                    });
+                    this.sendNotificationEmail({
+                        companyId: activeCoId,
+                        to: recipients,
+                        subject: `[Clock+] OT Actuals ${approved ? 'Verified & Approved' : 'Disputed'} (${id}) - ${projName}`,
+                        htmlBody: emailHtml
+                    }).catch(e => console.warn("Email verification notification error:", e));
+                }
+            }
+        } catch (e) {
+            console.warn("Could not check verification email settings:", e);
         }
 
         // Supabase sync

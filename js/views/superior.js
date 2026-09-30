@@ -21,6 +21,11 @@ export function renderSuperiorView(container, superiorId) {
         if (isGlobal) return true;
         return db.canUserApproveFor(superiorId, r.requesterId) || r.approverId === superiorId;
     });
+    const pendingVerificationRequests = db.getRequests().filter(r => {
+        if (r.status !== 'Pending Verification') return false;
+        if (isGlobal) return true;
+        return db.canUserApproveFor(superiorId, r.requesterId) || r.approverId === superiorId;
+    });
     const approvedTeamRequests = teamRequests.filter(r => r.status === 'Approved');
     const totalTeamApprovedHours = approvedTeamRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
@@ -148,7 +153,14 @@ export function renderSuperiorView(container, superiorId) {
             <div class="card glass-panel" style="margin-bottom: 0; padding: 20px; border-left: 4px solid var(--warning);">
                 <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Pending Approvals</div>
                 <div style="font-size: 1.8rem; font-weight: 800; color: #f59e0b; margin-top: 6px;">${pendingRequests.length}</div>
-                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">Awaiting your review</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">Awaiting schedule review</div>
+            </div>
+
+            <!-- Pending Actuals Verifications -->
+            <div class="card glass-panel" style="margin-bottom: 0; padding: 20px; border-left: 4px solid #0284c7;">
+                <div style="font-size: 0.82rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase;">Pending Verifications</div>
+                <div style="font-size: 1.8rem; font-weight: 800; color: #0284c7; margin-top: 6px;">${pendingVerificationRequests.length}</div>
+                <div style="font-size: 0.78rem; color: var(--text-muted); margin-top: 8px;">Closed shifts awaiting sign-off</div>
             </div>
 
             <!-- Team Workforce -->
@@ -173,6 +185,24 @@ export function renderSuperiorView(container, superiorId) {
                 <span class="badge badge-pending" id="pending-count">${pendingRequests.length} Pending</span>
             </div>
             <div id="approvals-queue-list" style="display:flex; flex-direction:column; gap:16px;">
+                <!-- Injected dynamically -->
+            </div>
+        </div>
+
+        <!-- Pending Actuals Verification Queue -->
+        <div class="card glass-panel" style="margin-bottom: 24px; border-left: 4px solid #0284c7;">
+            <div class="card-header" style="margin-bottom: 16px;">
+                <div>
+                    <h2 class="card-title" style="color: #0369a1;">${icons.check} Pending Actuals Verification Queue</h2>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 4px;">
+                        Review, adjust if necessary, and sign off on actual hours submitted by workers after finishing their shifts.
+                    </p>
+                </div>
+                <span class="badge" id="verification-count" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-weight:700;">
+                    ${pendingVerificationRequests.length} Awaiting Verification
+                </span>
+            </div>
+            <div id="verifications-queue-list" style="display:flex; flex-direction:column; gap:16px;">
                 <!-- Injected dynamically -->
             </div>
         </div>
@@ -597,15 +627,99 @@ export function renderSuperiorView(container, superiorId) {
         });
     };
 
+    // --- 3b. Render Pending Actuals Verifications ---
+    const loadVerificationQueue = () => {
+        const queueList = document.getElementById('verifications-queue-list');
+        const countBadge = document.getElementById('verification-count');
+        if (!queueList || !countBadge) return;
+
+        const requests = db.getRequests().filter(r => {
+            if (r.status !== 'Pending Verification') return false;
+            if (isGlobal) return true;
+            return db.canUserApproveFor(superiorId, r.requesterId) || r.approverId === superiorId;
+        });
+
+        countBadge.innerText = `${requests.length} Awaiting Verification`;
+
+        if (requests.length === 0) {
+            queueList.innerHTML = `
+                <div class="empty-state" style="padding: 24px; text-align: center; color: var(--text-muted);">
+                    ${icons.check}
+                    <div style="margin-top: 8px; font-weight: 500;">No closed shifts waiting for actuals verification. All caught up!</div>
+                </div>
+            `;
+            return;
+        }
+
+        queueList.innerHTML = requests.map(r => {
+            const worker = db.getUser(r.requesterId);
+            const project = db.getProject(r.project);
+            const teamNames = r.teamMembers && r.teamMembers.length > 0
+                ? r.teamMembers.map(tid => db.getUser(tid)?.name || tid).join(', ')
+                : 'None';
+
+            const actualNet = Number(r.actualDuration != null ? r.actualDuration : r.duration || 0).toFixed(1);
+            const scheduledDur = Number(r.duration || 0).toFixed(1);
+
+            return `
+                <div class="mobile-shift-card" style="border-left: 4px solid #0284c7; background: #ffffff;">
+                    <div class="mobile-shift-header">
+                        <div>
+                            <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:#0369a1; margin-bottom:2px;">Submitted by Worker:</div>
+                            <div style="font-weight:700; font-size:1.05rem; color:var(--text-main);">
+                                ${worker ? worker.name : r.requesterId}
+                                <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.7rem; margin-left:6px;">Closed Shift</span>
+                            </div>
+                            <div style="font-size:0.8rem; color:var(--text-muted); margin-top:2px;">
+                                <strong>${project ? project.name : (r.project || 'Project')}</strong> (${r.id})
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Reported Net Actual</div>
+                            <div style="font-size: 1.25rem; font-weight:800; color:#0369a1;">${actualNet} hrs</div>
+                            <div style="font-size:0.72rem; color:var(--text-muted);">Planned: ${scheduledDur}h</div>
+                        </div>
+                    </div>
+
+                    <div style="font-size:0.86rem; line-height:1.4; color:var(--text-main); margin-top:6px;">
+                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 10px; font-size:0.82rem;">
+                            <strong style="color:var(--text-muted); font-size:0.76rem; text-transform:uppercase; display:block; margin-bottom:2px;">Worker's Completion Comments:</strong>
+                            "${r.closingRemarks || 'No completion remarks provided.'}"
+                        </div>
+                        ${teamNames !== 'None' ? `<div style="margin-top:6px; font-size:0.8rem; color:var(--text-muted);"><strong>Team:</strong> ${teamNames}</div>` : ''}
+                    </div>
+
+                    <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px solid var(--border-color); padding-top:8px; margin-top:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                        <div>
+                            Actual Time: <strong>${formatDateTime(r.actualStartDate || r.startDate)}</strong> &rarr; <strong>${formatDateTime(r.actualEndDate || r.endDate)}</strong>
+                        </div>
+                        <div>
+                            <button class="btn btn-primary btn-sm btn-verify-actuals-queue" data-id="${r.id}" style="background:#0284c7; border-color:#0284c7; font-weight:700; padding:6px 14px;">
+                                ${icons.check} Verify &amp; Sign Off Actuals
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        document.querySelectorAll('.btn-verify-actuals-queue').forEach(btn => {
+            btn.onclick = () => {
+                const reqId = btn.dataset.id;
+                if (window.openRequestReviewModal) window.openRequestReviewModal(reqId);
+            };
+        });
+    };
+
     // --- 4. Render Subordinates List (Teammates OT utilization) ---
     const loadSubordinates = () => {
-        const allAuthorizedRequests = db.getRequests().filter(r => r.status === 'Approved' || r.status === 'Completed');
+        const allAuthorizedRequests = db.getRequests().filter(r => r.status === 'Approved' || r.status === 'Completed' || r.status === 'Pending Verification');
         subordinatesList.innerHTML = subordinates.map(s => {
             const workerRequests = allAuthorizedRequests.filter(r => 
                 r.requesterId === s.id || (r.teamMembers && r.teamMembers.includes(s.id))
             );
             const totalHours = workerRequests.reduce((sum, r) => {
-                const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
                 return sum + (isNaN(h) ? 0 : h);
             }, 0);
             const limits = db.getWorkerLimits(s.id);
@@ -634,6 +748,7 @@ export function renderSuperiorView(container, superiorId) {
 
     const refreshAll = () => {
         loadPendingQueue();
+        loadVerificationQueue();
         loadSubordinates();
         updateDailyTrendChart();
         updateYearlyTrendChart();

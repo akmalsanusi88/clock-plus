@@ -209,7 +209,8 @@ export function renderWorkerView(container, workerId) {
                 <input type="text" id="filter-search" class="filter-input" placeholder="Search project, deliverables, ID..." style="flex-grow: 1;">
                 <select id="filter-status" class="filter-input" style="width: 150px;">
                     <option value="">All Statuses</option>
-                    <option value="Completed">Completed (Closed)</option>
+                    <option value="Completed">Completed (Verified)</option>
+                    <option value="Pending Verification">Pending Verification</option>
                     <option value="Approved">Approved (In Progress)</option>
                     <option value="Cancelled">Cancelled (0.0h)</option>
                     <option value="Pending Approval">Pending Approval</option>
@@ -466,6 +467,7 @@ export function renderWorkerView(container, workerId) {
         historyTbody.innerHTML = filtered.map(r => {
             let statusBadge = '';
             if (r.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+            else if (r.status === 'Pending Verification') statusBadge = `<span class="badge badge-pending" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Pending Verification</span>`;
             else if (r.status === 'Approved') statusBadge = `<span class="badge badge-pending" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Approved (Active)</span>`;
             else if (r.status === 'Cancelled') statusBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
             else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
@@ -475,10 +477,10 @@ export function renderWorkerView(container, workerId) {
             const project = db.getProject(r.project);
             const projectName = project ? project.name : (r.project || 'Project');
 
-            const sDate = r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart);
-            const eDate = r.status === 'Completed' && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd);
+            const sDate = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart);
+            const eDate = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd);
             let durationDisplay = `${Number(r.duration).toFixed(1)} hrs`;
-            if (r.status === 'Completed' && r.actualDuration != null) {
+            if ((r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null) {
                 durationDisplay = `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`;
             } else if (r.status === 'Cancelled') {
                 durationDisplay = `<span style="color:#dc2626;">0.0 hrs</span> <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(cancelled)</span>`;

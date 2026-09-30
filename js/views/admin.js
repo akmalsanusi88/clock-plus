@@ -102,9 +102,9 @@ export function renderAdminDashboard(container) {
     const myAllRequests = requests.filter(r => 
         r.requesterId === currentUserId || (r.teamMembers && r.teamMembers.includes(currentUserId))
     );
-    const myApproved = myAllRequests.filter(r => r.status === 'Approved' || r.status === 'Completed');
+    const myApproved = myAllRequests.filter(r => r.status === 'Approved' || r.status === 'Completed' || r.status === 'Pending Verification');
     const myApprovedHours = myApproved.reduce((acc, r) => {
-        const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+        const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
         return acc + (isNaN(h) ? 0 : h);
     }, 0);
     const myLimits = currentUserId ? db.getWorkerLimits(currentUserId) : { monthlyMax: 104 };
@@ -239,6 +239,7 @@ export function renderAdminDashboard(container) {
                         const pName = proj ? proj.name : (r.project || 'General');
                         let stBadge = `<span class="badge badge-pending">Pending</span>`;
                         if (r.status === 'Completed') stBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+                        else if (r.status === 'Pending Verification') stBadge = `<span class="badge badge-pending" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Pending Verification</span>`;
                         else if (r.status === 'Approved') stBadge = `<span class="badge badge-approved">${icons.check} Approved</span>`;
                         else if (r.status === 'Cancelled') stBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
                         else if (r.status === 'Rejected') stBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
@@ -246,7 +247,7 @@ export function renderAdminDashboard(container) {
                         const isReqUser = r.requesterId === currentUserId || (currentEmail && r.requesterId === currentEmail);
                         const canClose = r.status === 'Approved' && (isReqUser || isAdmin);
                         let durationDisplay = `${Number(r.duration || 0).toFixed(1)} hrs`;
-                        if (r.status === 'Completed' && r.actualDuration != null) {
+                        if ((r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null) {
                             durationDisplay = `${Number(r.actualDuration).toFixed(1)} hrs <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(actual)</span>`;
                         } else if (r.status === 'Cancelled') {
                             durationDisplay = `<span style="color:#dc2626;">0.0 hrs</span> <span style="font-size:0.7rem; color:var(--text-muted); font-weight:normal;">(cancelled)</span>`;
@@ -262,7 +263,7 @@ export function renderAdminDashboard(container) {
                                     </div>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--text-muted);">
-                                    <span>${formatDateTime(r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart))}</span>
+                                    <span>${formatDateTime((r.status === 'Completed' || r.status === 'Pending Verification') && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart))}</span>
                                     <strong style="color: var(--text-main); font-size: 0.84rem;">${durationDisplay}</strong>
                                 </div>
                             </div>
@@ -996,6 +997,7 @@ export function renderAdminReport(container) {
                         <select id="rep-filter-status" class="filter-input" style="min-width: 130px; height: 34px; font-size: 0.8rem; padding: 0 8px;">
                             <option value="">All Statuses</option>
                             <option value="Completed">Completed (Closed)</option>
+                            <option value="Pending Verification">Pending Verification</option>
                             <option value="Approved">Approved (Active)</option>
                             <option value="Cancelled">Cancelled (0.0h)</option>
                             <option value="Pending Approval">Pending Approval</option>
@@ -1367,10 +1369,11 @@ export function renderAdminReport(container) {
         currentFiltered.sort((a,b) => new Date(b.startDate || b.dateStart) - new Date(a.startDate || a.dateStart));
 
         const totalHours = currentFiltered.reduce((acc, r) => {
-            const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+            const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : (r.status === 'Cancelled' ? 0 : Number(r.duration || 0));
             return acc + (isNaN(h) ? 0 : h);
         }, 0);
         const completedHours = currentFiltered.filter(r => r.status === 'Completed').reduce((acc, r) => acc + (Number(r.actualDuration != null ? r.actualDuration : r.duration) || 0), 0);
+        const pendingVerifyHours = currentFiltered.filter(r => r.status === 'Pending Verification').reduce((acc, r) => acc + (Number(r.actualDuration != null ? r.actualDuration : r.duration) || 0), 0);
         const approvedHours = currentFiltered.filter(r => r.status === 'Approved').reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
 
         const participatingWorkerIds = new Set();
@@ -1387,7 +1390,7 @@ export function renderAdminReport(container) {
             ? ` | Period: <strong>${fromDateStr || 'Start'}</strong> to <strong>${toDateStr || 'Latest'}</strong>`
             : '';
 
-        summaryStats.innerHTML = `Showing <strong>${currentFiltered.length}</strong> records across <strong>${participatingWorkerIds.size}</strong> workers | Period Overtime: <strong>${totalHours.toFixed(1)}h</strong> (Completed: <strong style="color:var(--success);">${completedHours.toFixed(1)}h</strong>, Active: <strong style="color:var(--primary);">${approvedHours.toFixed(1)}h</strong>)${periodLabel}`;
+        summaryStats.innerHTML = `Showing <strong>${currentFiltered.length}</strong> records across <strong>${participatingWorkerIds.size}</strong> workers | Period Overtime: <strong>${totalHours.toFixed(1)}h</strong> (Completed: <strong style="color:var(--success);">${completedHours.toFixed(1)}h</strong>${pendingVerifyHours > 0 ? `, Pending Verification: <strong style="color:#0284c7;">${pendingVerifyHours.toFixed(1)}h</strong>` : ''}, Active: <strong style="color:var(--primary);">${approvedHours.toFixed(1)}h</strong>)${periodLabel}`;
 
         if (currentFiltered.length === 0) {
             reportRows.innerHTML = `
@@ -1408,15 +1411,16 @@ export function renderAdminReport(container) {
 
                 let statusBadge = '';
                 if (r.status === 'Completed') statusBadge = `<span class="badge badge-approved" style="background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0;">${icons.check} Completed</span>`;
+                else if (r.status === 'Pending Verification') statusBadge = `<span class="badge badge-pending" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd;">Pending Verification</span>`;
                 else if (r.status === 'Approved') statusBadge = `<span class="badge badge-pending" style="background:#e0e7ff; color:#3730a3; border:1px solid #c7d2fe;">Approved (Active)</span>`;
                 else if (r.status === 'Cancelled') statusBadge = `<span class="badge badge-rejected" style="background:#fef2f2; color:#991b1b; border:1px solid #fecaca;">Cancelled (0.0h)</span>`;
                 else if (r.status === 'Rejected') statusBadge = `<span class="badge badge-rejected">${icons.times} Rejected</span>`;
                 else if (r.status === 'Pending Worker Consent') statusBadge = `<span class="badge badge-pending">Consent Required</span>`;
                 else statusBadge = `<span class="badge badge-pending">Pending</span>`;
 
-                const startDisplay = formatDateTime(r.status === 'Completed' && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart));
-                const endDisplay = formatDateTime(r.status === 'Completed' && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd || r.startDate));
-                const durVal = r.status === 'Cancelled' ? 0 : (r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0));
+                const startDisplay = formatDateTime((r.status === 'Completed' || r.status === 'Pending Verification') && r.actualStartDate ? r.actualStartDate : (r.startDate || r.dateStart));
+                const endDisplay = formatDateTime((r.status === 'Completed' || r.status === 'Pending Verification') && r.actualEndDate ? r.actualEndDate : (r.endDate || r.dateEnd || r.startDate));
+                const durVal = r.status === 'Cancelled' ? 0 : ((r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0));
 
                 return `
                     <tr class="rep-main-row" data-id="${r.id}" style="cursor: pointer;">
@@ -1435,7 +1439,7 @@ export function renderAdminReport(container) {
                         <td style="font-size: 0.78rem; color: var(--text-main); white-space: nowrap;">${endDisplay}</td>
                         <td style="font-weight: 700; color: var(--primary); font-size: 0.84rem;">
                             ${durVal.toFixed(1)} hrs
-                            ${r.status === 'Completed' ? `<span style="font-size:0.68rem; color:var(--text-muted); font-weight:normal; display:block;">(actual)</span>` : (r.status === 'Cancelled' ? `<span style="font-size:0.68rem; color:#dc2626; font-weight:normal; display:block;">(cancelled)</span>` : '')}
+                            ${(r.status === 'Completed' || r.status === 'Pending Verification') ? `<span style="font-size:0.68rem; color:var(--text-muted); font-weight:normal; display:block;">(actual)</span>` : (r.status === 'Cancelled' ? `<span style="font-size:0.68rem; color:#dc2626; font-weight:normal; display:block;">(cancelled)</span>` : '')}
                         </td>
                         <td>${statusBadge}</td>
                         <td style="text-align: right; white-space: nowrap;">
@@ -1469,18 +1473,23 @@ export function renderAdminReport(container) {
                                         }).join('')}
                                     </div>
 
-                                    ${r.status === 'Completed' ? `
-                                        <div style="margin-top: 10px; padding: 8px 12px; background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; font-size: 0.78rem;">
-                                            <div style="font-weight: 700; color: #065f46; margin-bottom: 2px;">Actual Overtime Timesheet (Closed):</div>
-                                            <div style="color: #047857;">
+                                    ${(r.status === 'Completed' || r.status === 'Pending Verification') ? `
+                                        <div style="margin-top: 10px; padding: 8px 12px; background: ${r.status === 'Completed' ? '#ecfdf5' : '#f0f9ff'}; border: 1px solid ${r.status === 'Completed' ? '#a7f3d0' : '#bae6fd'}; border-radius: 8px; font-size: 0.78rem;">
+                                            <div style="font-weight: 700; color: ${r.status === 'Completed' ? '#065f46' : '#0369a1'}; margin-bottom: 2px;">Actual Overtime Timesheet (${r.status === 'Completed' ? 'Verified & Completed' : 'Closed - Awaiting Superior Verification'}):</div>
+                                            <div style="color: ${r.status === 'Completed' ? '#047857' : '#0284c7'};">
                                                 Actual Range: <strong>${formatDateTime(r.actualStartDate || r.startDate)}</strong> &rarr; <strong>${formatDateTime(r.actualEndDate || r.endDate)}</strong>
                                                 &bull; Gross: <strong>${Number(r.actualGrossDuration || r.grossDuration || r.duration || 0).toFixed(1)}h</strong>
                                                 ${Number(r.actualRestDeduction || 0) > 0 ? `&bull; Rest Break: <strong>-${Number(r.actualRestDeduction).toFixed(1)}h</strong>` : ''}
                                                 &bull; Net Claimable: <strong>${Number(r.actualDuration || r.duration || 0).toFixed(1)}h</strong>
                                             </div>
                                             ${r.closingRemarks ? `
-                                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #a7f3d0; color: #065f46;">
+                                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed ${r.status === 'Completed' ? '#a7f3d0' : '#bae6fd'}; color: ${r.status === 'Completed' ? '#065f46' : '#0369a1'};">
                                                     <strong>Closing Remarks:</strong> "${r.closingRemarks}"
+                                                </div>
+                                            ` : ''}
+                                            ${r.verifiedBy ? `
+                                                <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #a7f3d0; color: #065f46;">
+                                                    <strong>Verified By:</strong> ${r.verifiedBy} ${r.verifiedAt ? `on ${formatDateTime(r.verifiedAt)}` : ''} ${r.verificationRemarks ? `("${r.verificationRemarks}")` : ''}
                                                 </div>
                                             ` : ''}
                                         </div>
@@ -1634,15 +1643,15 @@ export function renderAdminReport(container) {
                 );
 
                 const workerPeriodHours = workerShifts.reduce((acc, r) => {
-                    const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                    const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : (r.status === 'Cancelled' ? 0 : Number(r.duration || 0));
                     return acc + (isNaN(h) ? 0 : h);
                 }, 0);
                 
                 const workerAllAuthorized = allReqs.filter(r => 
-                    (r.status === 'Approved' || r.status === 'Completed') && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
+                    (r.status === 'Approved' || r.status === 'Completed' || r.status === 'Pending Verification') && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
                 );
                 const totalAccruedMonth = workerAllAuthorized.reduce((acc, r) => {
-                    const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
+                    const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
                     return acc + (isNaN(h) ? 0 : h);
                 }, 0);
                 const pct = monthlyMax > 0 ? Math.min(100, Math.round((totalAccruedMonth / monthlyMax) * 100)) : 0;
@@ -1702,18 +1711,20 @@ export function renderAdminReport(container) {
                                             const pObj = db.getProject(ws.project);
                                             const pName = pObj ? pObj.name : (ws.project || 'Project');
                                             const isDone = ws.status === 'Completed';
+                                            const isPendingVerify = ws.status === 'Pending Verification';
+                                            const hasActuals = (isDone || isPendingVerify) && ws.actualStartDate;
                                             const isCancelled = ws.status === 'Cancelled';
-                                            const sObj = new Date(isDone && ws.actualStartDate ? ws.actualStartDate : (ws.startDate || ws.dateStart));
-                                            const eObj = new Date(isDone && ws.actualEndDate ? ws.actualEndDate : (ws.endDate || ws.dateEnd || ws.startDate));
-                                            const dateOnly = formatDateOnly(isDone && ws.actualStartDate ? ws.actualStartDate : (ws.startDate || ws.dateStart));
+                                            const sObj = new Date(hasActuals ? ws.actualStartDate : (ws.startDate || ws.dateStart));
+                                            const eObj = new Date(hasActuals && ws.actualEndDate ? ws.actualEndDate : (ws.endDate || ws.dateEnd || ws.startDate));
+                                            const dateOnly = formatDateOnly(hasActuals ? ws.actualStartDate : (ws.startDate || ws.dateStart));
                                             const sTime = !isNaN(sObj.getTime()) ? sObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : (ws.actualTimeStart || ws.timeStart || '-');
                                             const eTime = !isNaN(eObj.getTime()) ? eObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: true }) : (ws.actualTimeEnd || ws.timeEnd || '-');
                                             
-                                            const grossH = isCancelled ? 0 : Number(isDone && ws.actualGrossDuration != null ? ws.actualGrossDuration : (ws.grossDuration || ws.duration || 0));
-                                            const restH = isCancelled ? 0 : Number(isDone && ws.actualRestDeduction != null ? ws.actualRestDeduction : (ws.restDeduction || 0));
-                                            const netH = isCancelled ? 0 : Number(isDone && ws.actualDuration != null ? ws.actualDuration : (ws.duration || 0));
+                                            const grossH = isCancelled ? 0 : Number((isDone || isPendingVerify) && ws.actualGrossDuration != null ? ws.actualGrossDuration : (ws.grossDuration || ws.duration || 0));
+                                            const restH = isCancelled ? 0 : Number((isDone || isPendingVerify) && ws.actualRestDeduction != null ? ws.actualRestDeduction : (ws.restDeduction || 0));
+                                            const netH = isCancelled ? 0 : Number((isDone || isPendingVerify) && ws.actualDuration != null ? ws.actualDuration : (ws.duration || 0));
 
-                                            let st = isDone ? '✅ Completed' : (ws.status === 'Approved' ? '⚡ Active' : (ws.status === 'Cancelled' ? '⛔ Cancelled' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending')));
+                                            let st = isDone ? '✅ Completed' : (isPendingVerify ? '🔍 Verifying' : (ws.status === 'Approved' ? '⚡ Active' : (ws.status === 'Cancelled' ? '⛔ Cancelled' : (ws.status === 'Rejected' ? '❌ Rejected' : '🕒 Pending'))));
                                             return `
                                                 <tr>
                                                     <td style="padding: 5px 8px; font-weight: 600;">${dateOnly}</td>
