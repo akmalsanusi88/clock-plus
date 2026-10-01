@@ -1025,15 +1025,23 @@ export function showPasswordResetModal(onSavePassword, onCancel) {
         </div>
     `;
 
-    modal.style.display = 'flex';
+    modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15, 23, 42, 0.75); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 999999; opacity: 1; pointer-events: all;';
+    modal.classList.add('active');
 
     const form = modal.querySelector('#recovery-password-form');
     const cancelBtn = modal.querySelector('#recovery-cancel-btn');
     const saveBtn = modal.querySelector('#recovery-save-btn');
     const errMsg = modal.querySelector('#recovery-err-msg');
 
-    cancelBtn.onclick = () => {
+    const closeModal = () => {
+        modal.classList.remove('active');
         modal.style.display = 'none';
+        modal.style.opacity = '0';
+        modal.style.pointerEvents = 'none';
+    };
+
+    cancelBtn.onclick = () => {
+        closeModal();
         if (onCancel) onCancel();
     };
 
@@ -1061,7 +1069,7 @@ export function showPasswordResetModal(onSavePassword, onCancel) {
             if (onSavePassword) {
                 await onSavePassword(p1);
             }
-            modal.style.display = 'none';
+            closeModal();
         } catch (err) {
             errMsg.innerText = err.message || "Failed to update password.";
             errMsg.style.display = 'block';

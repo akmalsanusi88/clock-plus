@@ -990,7 +990,8 @@ class Database {
             window.location.protocol === 'file:'
         );
         // Default to live production URL so email links opened on phones route properly
-        const redirectUrl = isLocal ? 'https://clock-plus.vercel.app' : window.location.origin;
+        const baseOrigin = isLocal ? 'https://clock-plus.vercel.app' : window.location.origin;
+        const redirectUrl = `${baseOrigin.replace(/\/$/, '')}/?reset=true`;
         const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
             redirectTo: redirectUrl
         });

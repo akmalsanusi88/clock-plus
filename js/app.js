@@ -114,6 +114,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     initLoginScreen(); // Bind submit event immediately on page load
     initSessionActivityMonitoring();
 
+    // Handle URL parameters from Supabase email redirects (PKCE code, reset flag, or hash)
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get('code');
+    const hasResetFlag = urlParams.get('reset') === 'true';
+    const hash = window.location.hash || '';
+    const hasRecoveryHash = hash.includes('type=recovery') || hash.includes('access_token=');
+    const urlError = urlParams.get('error') || (hash.includes('error=') ? 'error' : null);
+
+    if (urlError) {
+        const errorDesc = urlParams.get('error_description') || 'This password reset link is invalid or has expired.';
+        showToast(decodeURIComponent(errorDesc.replace(/\+/g, ' ')), "error");
+        if (window.history.replaceState) {
+            window.history.replaceState(null, null, window.location.pathname);
+        }
+        setStage('auth');
+        return;
+    }
+
+    if (authCode || hasResetFlag || hasRecoveryHash) {
+        setStage('auth');
+        if (authCode) {
+            try {
+                const { error: exchangeErr } = await supabase.auth.exchangeCodeForSession(authCode);
+                if (exchangeErr) {
+                    console.warn("PKCE code exchange error:", exchangeErr);
+                    showToast("Password reset link is invalid or has expired. Please request a new link.", "error");
+                    if (window.history.replaceState) {
+                        window.history.replaceState(null, null, window.location.pathname);
+                    }
+                    return;
+                }
+            } catch (e) {
+                console.warn("PKCE exchange exception:", e);
+            }
+        }
+        handlePasswordRecovery();
+        return;
+    }
+
     // Listen for Supabase Auth Password Recovery event
     if (supabase && supabase.auth) {
         supabase.auth.onAuthStateChange((event, session) => {
@@ -121,12 +160,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 handlePasswordRecovery();
             }
         });
-    }
-
-    // Check if URL hash indicates a recovery redirect (e.g. #access_token=...&type=recovery)
-    if (window.location.hash && window.location.hash.includes('type=recovery')) {
-        handlePasswordRecovery();
-        return;
     }
 
     // Verify if there is an active session in this tab/window
@@ -220,6 +253,31 @@ function initLoginScreen() {
             } finally {
                 loginBtn.disabled = false;
                 loginBtn.innerText = originalText;
+            }
+        };
+    }
+
+    const forgotBtn = document.getElementById('btn-login-forgot-password');
+    if (forgotBtn) {
+        forgotBtn.onclick = async () => {
+            const usernameInput = document.getElementById('login-username');
+            const defaultEmail = (usernameInput && usernameInput.value.includes('@')) ? usernameInput.value.trim() : '';
+            const email = prompt("Enter your account email address to receive a password reset link:", defaultEmail);
+            if (!email || !email.trim()) return;
+
+            const trimmedEmail = email.trim();
+            if (!trimmedEmail.includes('@')) {
+                showToast("Please enter a valid email address.", "error");
+                return;
+            }
+
+            try {
+                showToast("Sending reset link...", "info");
+                await db.sendPasswordResetEmail(trimmedEmail);
+                showToast(`Password reset link sent to ${trimmedEmail}! Please check your email inbox.`, "success");
+            } catch (err) {
+                console.error("Forgot password error:", err);
+                showToast(err.message || "Failed to send reset link.", "error");
             }
         };
     }
