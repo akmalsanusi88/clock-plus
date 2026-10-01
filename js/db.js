@@ -5,6 +5,7 @@ import { generateNewRequestEmailHtml, generateStatusUpdateEmailHtml, generateClo
 
 const DB_KEY = 'clock_plus_db';
 const supabaseUrl = 'https://dkxjlhpiaignyqbbxyxu.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRreGpsaHBpYWlnbnlxYmJ4eXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NTU2MjcsImV4cCI6MjEwMzAzMTYyN30.Ina8RxDpukQbBNLSu8C96876I_QDfu-HiUQYH5YkymY';
 export const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: {
         flowType: 'implicit',
