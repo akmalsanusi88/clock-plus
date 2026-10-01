@@ -984,8 +984,15 @@ class Database {
     // Send official Supabase Password Reset Email Link
     async sendPasswordResetEmail(email) {
         if (!email) throw new Error("Email is required to send password reset.");
+        const isLocal = typeof window !== 'undefined' && (
+            window.location.hostname === 'localhost' || 
+            window.location.hostname === '127.0.0.1' ||
+            window.location.protocol === 'file:'
+        );
+        // Default to live production URL so email links opened on phones route properly
+        const redirectUrl = isLocal ? 'https://clock-plus.vercel.app' : window.location.origin;
         const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin
+            redirectTo: redirectUrl
         });
         if (error) throw error;
         return data;

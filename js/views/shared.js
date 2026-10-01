@@ -981,3 +981,92 @@ export function generateVerifiedOtEmailHtml({ req, approverName, workerName, act
 </body>
 </html>`;
 }
+
+// Pop-up Modal to Create / Reset New Password (from Supabase Recovery Link)
+export function showPasswordResetModal(onSavePassword, onCancel) {
+    let modal = document.getElementById('password-recovery-modal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'password-recovery-modal';
+        modal.className = 'modal-overlay';
+        modal.style.zIndex = '99999';
+        document.body.appendChild(modal);
+    }
+
+    modal.innerHTML = `
+        <div class="modal-box glass-panel" style="max-width: 420px; padding: 28px 24px; animation: modalZoomIn 0.2s cubic-bezier(0.16, 1, 0.3, 1); border-radius: 14px;">
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom: 16px;">
+                <div style="width: 42px; height: 42px; border-radius: 10px; background: #e0e7ff; color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 1.25rem;">
+                    🔑
+                </div>
+                <div>
+                    <h3 style="margin: 0; font-size: 1.15rem; color: var(--text-main); font-weight: 700;">Set New Password</h3>
+                    <p style="margin: 2px 0 0 0; font-size: 0.8rem; color: var(--text-muted);">Enter a secure new password for your account.</p>
+                </div>
+            </div>
+
+            <form id="recovery-password-form" style="display: flex; flex-direction: column; gap: 14px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="recovery-new-pass" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 5px; color: var(--text-main);">New Password</label>
+                    <input type="password" id="recovery-new-pass" required minlength="6" placeholder="At least 6 characters" class="filter-input" style="width: 100%; height: 38px; padding: 0 12px; font-size: 0.9rem; border-radius: 8px; background: #ffffff !important; color: #0f172a !important; border: 1.5px solid var(--border-color);">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="recovery-confirm-pass" style="font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 5px; color: var(--text-main);">Confirm New Password</label>
+                    <input type="password" id="recovery-confirm-pass" required minlength="6" placeholder="Re-enter password" class="filter-input" style="width: 100%; height: 38px; padding: 0 12px; font-size: 0.9rem; border-radius: 8px; background: #ffffff !important; color: #0f172a !important; border: 1.5px solid var(--border-color);">
+                </div>
+
+                <div id="recovery-err-msg" style="display: none; font-size: 0.78rem; color: #dc2626; padding: 6px 10px; background: #fef2f2; border-radius: 6px; border: 1px solid #fecaca;"></div>
+
+                <div style="display: flex; gap: 10px; margin-top: 6px;">
+                    <button type="submit" id="recovery-save-btn" class="btn btn-primary" style="flex: 1; height: 38px; font-weight: 700;">Save Password</button>
+                    <button type="button" id="recovery-cancel-btn" class="btn btn-secondary" style="height: 38px;">Cancel</button>
+                </div>
+            </form>
+        </div>
+    `;
+
+    modal.style.display = 'flex';
+
+    const form = modal.querySelector('#recovery-password-form');
+    const cancelBtn = modal.querySelector('#recovery-cancel-btn');
+    const saveBtn = modal.querySelector('#recovery-save-btn');
+    const errMsg = modal.querySelector('#recovery-err-msg');
+
+    cancelBtn.onclick = () => {
+        modal.style.display = 'none';
+        if (onCancel) onCancel();
+    };
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const p1 = modal.querySelector('#recovery-new-pass').value;
+        const p2 = modal.querySelector('#recovery-confirm-pass').value;
+
+        if (p1 !== p2) {
+            errMsg.innerText = "Passwords do not match.";
+            errMsg.style.display = 'block';
+            return;
+        }
+        if (p1.length < 6) {
+            errMsg.innerText = "Password must be at least 6 characters long.";
+            errMsg.style.display = 'block';
+            return;
+        }
+
+        errMsg.style.display = 'none';
+        saveBtn.disabled = true;
+        saveBtn.innerText = "Saving...";
+
+        try {
+            if (onSavePassword) {
+                await onSavePassword(p1);
+            }
+            modal.style.display = 'none';
+        } catch (err) {
+            errMsg.innerText = err.message || "Failed to update password.";
+            errMsg.style.display = 'block';
+            saveBtn.disabled = false;
+            saveBtn.innerText = "Save Password";
+        }
+    };
+}

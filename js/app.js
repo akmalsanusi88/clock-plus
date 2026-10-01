@@ -1,8 +1,8 @@
-import { db } from './db.js';
+import { db, supabase } from './db.js';
 import { renderAdminView, renderAdminRequest, renderAdminReport } from './views/admin.js';
 import { renderWorkerView } from './views/worker.js';
 import { renderSuperiorView } from './views/superior.js';
-import { showToast, showRequestDecisionModal, openCloseOTModal, showCancelOTConfirmationModal, formatDateTime, icons, formatRoleName, renderRoleBadge } from './views/shared.js';
+import { showToast, showRequestDecisionModal, openCloseOTModal, showCancelOTConfirmationModal, showPasswordResetModal, formatDateTime, icons, formatRoleName, renderRoleBadge } from './views/shared.js';
 
 // Application State
 const state = {
@@ -79,6 +79,30 @@ function initSessionActivityMonitoring() {
     });
 }
 
+// Password Recovery Flow Handler (from Supabase Auth Email Link)
+function handlePasswordRecovery() {
+    setStage('auth');
+    showPasswordResetModal(
+        async (newPassword) => {
+            const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) throw error;
+            showToast("Password updated successfully! Please sign in with your new password.", "success");
+            if (window.history.replaceState) {
+                window.history.replaceState(null, null, window.location.pathname);
+            }
+            await supabase.auth.signOut();
+            clearSessionData();
+            setStage('auth');
+        },
+        () => {
+            if (window.history.replaceState) {
+                window.history.replaceState(null, null, window.location.pathname);
+            }
+            setStage('auth');
+        }
+    );
+}
+
 // Initialize Application
 document.addEventListener('DOMContentLoaded', async () => {
     window.db = db;
@@ -89,6 +113,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     initResponsiveNav();
     initLoginScreen(); // Bind submit event immediately on page load
     initSessionActivityMonitoring();
+
+    // Listen for Supabase Auth Password Recovery event
+    if (supabase && supabase.auth) {
+        supabase.auth.onAuthStateChange((event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
+                handlePasswordRecovery();
+            }
+        });
+    }
+
+    // Check if URL hash indicates a recovery redirect (e.g. #access_token=...&type=recovery)
+    if (window.location.hash && window.location.hash.includes('type=recovery')) {
+        handlePasswordRecovery();
+        return;
+    }
 
     // Verify if there is an active session in this tab/window
     if (!checkSessionActive()) {
