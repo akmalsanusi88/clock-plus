@@ -2056,6 +2056,25 @@ export function renderAdminSettings(container) {
                         </button>
                     </div>
 
+                    <!-- Direct Password Reset Card -->
+                    <div style="margin-bottom: 20px; padding: 14px; background: rgba(16, 185, 129, 0.04); border: 1px solid rgba(16, 185, 129, 0.25); border-radius: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <div style="width: 32px; height: 32px; border-radius: 8px; background: rgba(16, 185, 129, 0.12); color: #059669; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1rem;">
+                                ⚡
+                            </div>
+                            <div>
+                                <div style="font-size: 0.86rem; font-weight: 700; color: var(--text-main);">Instant Password Set</div>
+                                <div style="font-size: 0.73rem; color: var(--text-muted);">Set a new password immediately without waiting for an email.</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="password" id="edit-user-direct-pass" placeholder="Enter new password (min 6 chars)" style="flex: 1; height: 36px; padding: 0 10px; font-size: 0.84rem; border-radius: 6px; border: 1.5px solid var(--border-color); background: #ffffff !important; color: #0f172a !important;">
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-modal-direct-set-pass" style="white-space: nowrap; font-weight: 700; padding: 0 14px; height: 36px; font-size: 0.8rem; background: #059669; border-color: #059669;">
+                                Set Now
+                            </button>
+                        </div>
+                    </div>
+
                     <!-- Allowed Page Access (Neat & Modern Redesign) -->
                     <div style="margin-bottom: 22px;">
                         <label style="display: block; margin-bottom: 10px; font-weight: 700; font-size: 0.88rem; color: var(--text-main);">Allowed Page Access</label>
@@ -2619,6 +2638,38 @@ export function renderAdminSettings(container) {
             btnModalSendResetLink.innerText = originalText;
         }
     };
+
+    // Instant Direct Password Set Handler
+    const btnDirectSetPass = document.getElementById('btn-modal-direct-set-pass');
+    const directPassInput = document.getElementById('edit-user-direct-pass');
+    if (btnDirectSetPass && directPassInput) {
+        btnDirectSetPass.onclick = async () => {
+            const email = editUserEmailInput.value.trim();
+            const newPass = directPassInput.value.trim();
+            if (!email) {
+                showToast("User email address is required.", "error");
+                return;
+            }
+            if (!newPass || newPass.length < 6) {
+                showToast("Password must be at least 6 characters long.", "error");
+                return;
+            }
+
+            btnDirectSetPass.disabled = true;
+            btnDirectSetPass.innerText = "Setting...";
+            try {
+                await db.adminSetUserPassword(email, newPass);
+                showToast(`Password successfully updated for ${email}!`, "success");
+                directPassInput.value = '';
+            } catch (err) {
+                console.error("Direct set password error:", err);
+                showToast(err.message || "Failed to set password directly.", "error");
+            } finally {
+                btnDirectSetPass.disabled = false;
+                btnDirectSetPass.innerText = "Set Now";
+            }
+        };
+    }
 
     // Unified Edit User Form Submission
     editUserForm.onsubmit = async (e) => {

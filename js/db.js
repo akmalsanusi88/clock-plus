@@ -5,8 +5,14 @@ import { generateNewRequestEmailHtml, generateStatusUpdateEmailHtml, generateClo
 
 const DB_KEY = 'clock_plus_db';
 const supabaseUrl = 'https://dkxjlhpiaignyqbbxyxu.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRreGpsaHBpYWlnbnlxYmJ4eXh1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc0NTU2MjcsImV4cCI6MjEwMzAzMTYyN30.Ina8RxDpukQbBNLSu8C96876I_QDfu-HiUQYH5YkymY';
-export const supabase = createClient(supabaseUrl, supabaseKey);
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+    auth: {
+        flowType: 'implicit',
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: true
+    }
+});
 
 // Helper to convert Date objects or strings to local ISO-like date string (YYYY-MM-DD)
 export function getLocalDateString(date) {
@@ -997,6 +1003,23 @@ class Database {
         });
         if (error) throw error;
         return data;
+    }
+
+    // Direct password change for admin using Supabase stored procedure
+    async adminSetUserPassword(email, newPassword) {
+        if (!email || !newPassword) throw new Error("Email and new password are required.");
+        if (newPassword.length < 6) throw new Error("Password must be at least 6 characters.");
+
+        const { data, error } = await supabase.rpc('admin_set_user_password', {
+            target_email: email.trim().toLowerCase(),
+            new_password: newPassword
+        });
+
+        if (error) {
+            console.warn("RPC admin_set_user_password note:", error.message);
+            throw new Error(error.message || "Failed to set password directly.");
+        }
+        return true;
     }
 
     // Update user page permissions (e.g. ['dashboard', 'request', 'report', 'settings'])
