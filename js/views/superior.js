@@ -662,10 +662,10 @@ export function renderSuperiorView(container, superiorId) {
             const scheduledDur = Number(r.duration || 0).toFixed(1);
 
             return `
-                <div class="mobile-shift-card" style="border-left: 4px solid #0284c7; background: #ffffff;">
+                <div class="mobile-shift-card">
                     <div class="mobile-shift-header">
                         <div>
-                            <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:#0369a1; margin-bottom:2px;">Submitted by Worker:</div>
+                            <div style="font-size:0.75rem; text-transform:uppercase; letter-spacing:0.5px; font-weight:700; color:#0369a1; margin-bottom:2px;">Submitted Actuals by:</div>
                             <div style="font-weight:700; font-size:1.05rem; color:var(--text-main);">
                                 ${worker ? worker.name : r.requesterId}
                                 <span class="badge" style="background:#e0f2fe; color:#0369a1; border:1px solid #bae6fd; font-size:0.7rem; margin-left:6px;">Closed Shift</span>
@@ -675,38 +675,60 @@ export function renderSuperiorView(container, superiorId) {
                             </div>
                         </div>
                         <div style="text-align:right;">
-                            <div style="font-size:0.7rem; color:var(--text-muted); text-transform:uppercase; font-weight:600;">Reported Net Actual</div>
-                            <div style="font-size: 1.25rem; font-weight:800; color:#0369a1;">${actualNet} hrs</div>
+                            <div style="font-size: 1.15rem; font-weight:700; color:#0369a1;">${actualNet} hrs (Actual)</div>
                             <div style="font-size:0.72rem; color:var(--text-muted);">Planned: ${scheduledDur}h</div>
                         </div>
                     </div>
 
-                    <div style="font-size:0.86rem; line-height:1.4; color:var(--text-main); margin-top:6px;">
-                        <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:8px 10px; font-size:0.82rem;">
-                            <strong style="color:var(--text-muted); font-size:0.76rem; text-transform:uppercase; display:block; margin-bottom:2px;">Worker's Completion Comments:</strong>
-                            "${r.closingRemarks || 'No completion remarks provided.'}"
-                        </div>
-                        ${teamNames !== 'None' ? `<div style="margin-top:6px; font-size:0.8rem; color:var(--text-muted);"><strong>Team:</strong> ${teamNames}</div>` : ''}
+                    <div style="font-size:0.86rem; line-height:1.4; color:var(--text-main);">
+                        <div><strong>Worker's Comments:</strong> "${r.closingRemarks || 'No completion remarks provided.'}"</div>
+                        <div style="margin-top:4px;"><strong>Target:</strong> ${r.targetWork || r.target_work || 'N/A'}</div>
+                        ${teamNames !== 'None' ? `<div style="margin-top:4px; font-size:0.8rem; color:var(--text-muted);"><strong>Team:</strong> ${teamNames}</div>` : ''}
                     </div>
 
-                    <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px solid var(--border-color); padding-top:8px; margin-top:8px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-                        <div>
-                            Actual Time: <strong>${formatDateTime(r.actualStartDate || r.startDate)}</strong> &rarr; <strong>${formatDateTime(r.actualEndDate || r.endDate)}</strong>
-                        </div>
-                        <div>
-                            <button class="btn btn-primary btn-sm btn-verify-actuals-queue" data-id="${r.id}" style="background:#0284c7; border-color:#0284c7; font-weight:700; padding:6px 14px;">
-                                ${icons.check} Verify &amp; Sign Off Actuals
-                            </button>
-                        </div>
+                    <div style="font-size:0.8rem; color:var(--text-muted); border-top:1px solid var(--border-color); padding-top:8px; margin-top:4px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:4px;">
+                        <div>Actual Time: <strong>${formatDateTime(r.actualStartDate || r.startDate)}</strong> to <strong>${formatDateTime(r.actualEndDate || r.endDate)}</strong></div>
+                        ${Number(r.actualRestDeduction || 0) > 0 ? `<div>Rest Break Deducted: <strong>-${Number(r.actualRestDeduction).toFixed(1)}h</strong></div>` : ''}
+                    </div>
+
+                    <div class="mobile-shift-actions">
+                        <button class="btn btn-secondary btn-sm verify-modify-btn" data-id="${r.id}">Review & Adjust</button>
+                        <button class="btn btn-danger btn-sm verify-reject-btn" data-id="${r.id}">Reject</button>
+                        <button class="btn btn-success btn-sm verify-approve-btn" data-id="${r.id}">Approve</button>
                     </div>
                 </div>
             `;
         }).join('');
 
-        document.querySelectorAll('.btn-verify-actuals-queue').forEach(btn => {
+        document.querySelectorAll('.verify-modify-btn').forEach(btn => {
             btn.onclick = () => {
                 const reqId = btn.dataset.id;
                 if (window.openRequestReviewModal) window.openRequestReviewModal(reqId);
+            };
+        });
+
+        document.querySelectorAll('.verify-reject-btn').forEach(btn => {
+            btn.onclick = () => {
+                const reqId = btn.dataset.id;
+                if (window.openRequestReviewModal) {
+                    window.openRequestReviewModal(reqId);
+                }
+            };
+        });
+
+        document.querySelectorAll('.verify-approve-btn').forEach(btn => {
+            btn.onclick = () => {
+                const reqId = btn.dataset.id;
+                try {
+                    db.verifyOvertimeActuals(reqId, {
+                        approved: true,
+                        remarks: 'Verified & approved actual hours.'
+                    }, superiorId);
+                    showToast(`Overtime actuals for ${reqId} verified and approved successfully.`, 'success');
+                    refreshAll();
+                } catch (err) {
+                    showToast(err.message || 'Failed to verify actuals.', 'error');
+                }
             };
         });
     };
@@ -755,6 +777,7 @@ export function renderSuperiorView(container, superiorId) {
     };
 
     loadPendingQueue();
+    loadVerificationQueue();
     loadSubordinates();
 
     container.querySelectorAll('.btn-sup-close-ot, .btn-sup-personal-close-ot').forEach(btn => {
