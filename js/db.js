@@ -2076,7 +2076,19 @@ class Database {
         return newRequest;
     }
 
-    verifyOvertimeActuals(id, { approved = true, remarks = '', adjustedDuration = null, adjustedTimeStart = null, adjustedTimeEnd = null } = {}, actionUserId) {
+    verifyOvertimeActuals(id, { 
+        approved = true, 
+        remarks = '', 
+        adjustedDuration = null, 
+        adjustedGrossDuration = null,
+        adjustedRestDeduction = null,
+        adjustedStartDate = null,
+        adjustedEndDate = null,
+        adjustedDateStart = null,
+        adjustedDateEnd = null,
+        adjustedTimeStart = null, 
+        adjustedTimeEnd = null 
+    } = {}, actionUserId) {
         const data = this.getData();
         const index = data.requests.findIndex(r => r.id === id);
         if (index === -1) throw new Error(`Request ${id} not found.`);
@@ -2100,6 +2112,16 @@ class Database {
         if (adjustedDuration != null && !isNaN(Number(adjustedDuration))) {
             updatedFields.actualDuration = Number(adjustedDuration);
         }
+        if (adjustedGrossDuration != null && !isNaN(Number(adjustedGrossDuration))) {
+            updatedFields.actualGrossDuration = Number(adjustedGrossDuration);
+        }
+        if (adjustedRestDeduction != null && !isNaN(Number(adjustedRestDeduction))) {
+            updatedFields.actualRestDeduction = Number(adjustedRestDeduction);
+        }
+        if (adjustedStartDate) updatedFields.actualStartDate = adjustedStartDate;
+        if (adjustedEndDate) updatedFields.actualEndDate = adjustedEndDate;
+        if (adjustedDateStart) updatedFields.actualDateStart = adjustedDateStart;
+        if (adjustedDateEnd) updatedFields.actualDateEnd = adjustedDateEnd;
         if (adjustedTimeStart) updatedFields.actualTimeStart = adjustedTimeStart;
         if (adjustedTimeEnd) updatedFields.actualTimeEnd = adjustedTimeEnd;
 
@@ -2183,13 +2205,21 @@ class Database {
         }
 
         // Supabase sync
-        supabase.from('overtime_requests').update({
+        const sbPayload = {
             status: finalStatus,
             verified_by: actorId,
             verified_at: updatedFields.verifiedAt,
             verification_remarks: finalRemarks,
             actual_duration: newRequest.actualDuration
-        }).eq('id', id).then(({ error }) => {
+        };
+        if (newRequest.actualGrossDuration != null) sbPayload.actual_gross_duration = newRequest.actualGrossDuration;
+        if (newRequest.actualRestDeduction != null) sbPayload.actual_rest_deduction = newRequest.actualRestDeduction;
+        if (newRequest.actualStartDate) sbPayload.actual_start_date = newRequest.actualStartDate;
+        if (newRequest.actualEndDate) sbPayload.actual_end_date = newRequest.actualEndDate;
+        if (newRequest.actualTimeStart) sbPayload.actual_time_start = newRequest.actualTimeStart;
+        if (newRequest.actualTimeEnd) sbPayload.actual_time_end = newRequest.actualTimeEnd;
+
+        supabase.from('overtime_requests').update(sbPayload).eq('id', id).then(({ error }) => {
             if (error) {
                 // Fallback for schema without verified_* columns
                 supabase.from('overtime_requests').update({

@@ -803,15 +803,35 @@ export function openRequestReviewModal(requestId) {
 
     const cleanTime = (t) => {
         if (!t) return '18:00';
-        const str = String(t).trim();
+        let str = String(t).trim();
+        if (str.includes('T')) str = str.split('T')[1];
+        else if (str.includes(' ')) str = str.split(' ')[1];
+        const parts = str.split(':');
+        if (parts.length >= 2) {
+            return `${parts[0].padStart(2, '0')}:${parts[1].padStart(2, '0')}`;
+        }
         return str.length >= 5 ? str.slice(0, 5) : str;
     };
 
+    const cleanDate = (d, defaultVal = new Date().toISOString().slice(0, 10)) => {
+        if (!d) return defaultVal;
+        let clean = String(d).trim();
+        if (clean.includes('T')) clean = clean.split('T')[0];
+        else if (clean.includes(' ')) clean = clean.split(' ')[0];
+        if (clean.length === 10 && clean.includes('-')) return clean;
+        return defaultVal;
+    };
+
     // Format dates for inputs
-    const defaultDateStart = req.dateStart || (req.startDate ? req.startDate.slice(0, 10) : new Date().toISOString().slice(0, 10));
-    const defaultDateEnd = req.dateEnd || (req.endDate ? req.endDate.slice(0, 10) : defaultDateStart);
-    const defaultTimeStart = cleanTime(req.timeStart || (req.startDate ? new Date(req.startDate).toTimeString().slice(0, 5) : '18:00'));
-    const defaultTimeEnd = cleanTime(req.timeEnd || (req.endDate ? new Date(req.endDate).toTimeString().slice(0, 5) : '20:00'));
+    const defaultDateStart = cleanDate(req.dateStart || req.startDate);
+    const defaultDateEnd = cleanDate(req.dateEnd || req.endDate || defaultDateStart);
+    const defaultTimeStart = cleanTime(req.timeStart || req.startDate);
+    const defaultTimeEnd = cleanTime(req.timeEnd || req.endDate);
+
+    const defaultActualDateStart = cleanDate(req.actualDateStart || req.actualStartDate || defaultDateStart);
+    const defaultActualDateEnd = cleanDate(req.actualDateEnd || req.actualEndDate || defaultDateEnd);
+    const defaultActualTimeStart = cleanTime(req.actualTimeStart || req.actualStartDate || defaultTimeStart);
+    const defaultActualTimeEnd = cleanTime(req.actualTimeEnd || req.actualEndDate || defaultTimeEnd);
 
     const requesterName = requester ? requester.name : req.requesterId;
     const requesterRole = requester ? (requester.position || requester.role || 'Worker') : 'Worker';
@@ -1036,6 +1056,7 @@ export function openRequestReviewModal(requestId) {
                     <div><span style="color:var(--text-muted);">Verified By:</span><br><strong>${verifierName}</strong> <span style="font-size:0.76rem; color:var(--text-muted);">(${verifierRole})</span></div>
                     <div><span style="color:var(--text-muted);">Verified Date &amp; Time:</span><br>${verifiedAtTime ? formatDateTime(verifiedAtTime) : 'N/A'}</div>
                     <div><span style="color:var(--text-muted);">Final Authorized Overtime:</span><br><strong style="color:#059669; font-size:1.05rem;">${Number(req.actualDuration || req.duration || 0).toFixed(1)} hrs</strong> <span style="font-size:0.72rem; color:var(--text-muted);">(Payroll Validated)</span></div>
+                    <div><span style="color:var(--text-muted);">Final Accepted Shift Time:</span><br><strong>${formatDateTime(req.actualStartDate || req.startDate)}</strong> &rarr; <strong>${formatDateTime(req.actualEndDate || req.endDate)}</strong></div>
                 </div>
                 <div style="background:#ecfdf5; border:1px solid #a7f3d0; border-radius:8px; padding:10px 12px; margin-top:10px; font-size:0.84rem;">
                     <strong style="color:#065f46; font-size:0.82rem;">💬 Superior Verification Comments:</strong>
@@ -1057,12 +1078,45 @@ export function openRequestReviewModal(requestId) {
                     Worker has submitted their actual hours (${Number(req.actualDuration || req.duration || 0).toFixed(1)}h). Awaiting superior verification and sign-off.
                 </div>
                 ${isApproverOrAdmin ? `
-                    <div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:12px; margin-top:8px;">
+                    <div style="background:#fffbeb; border:1.5px solid #fde68a; border-radius:10px; padding:14px; margin-top:8px;">
+                        <!-- Inline Approver Controls for Finalizing Accepted Actual Time -->
+                        <div style="margin-bottom:12px;">
+                            <label style="font-weight:700; font-size:0.86rem; color:#92400e; margin-bottom:8px; display:flex; align-items:center; gap:6px;">
+                                <span>⏱️ Finalize Accepted Work Time &amp; Duration (Optional Adjustment):</span>
+                            </label>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap:8px; margin-bottom:8px;">
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="rev-actual-date-start" style="font-size:0.74rem; font-weight:600; color:#78350f;">Accepted Date Start</label>
+                                    <input type="date" id="rev-actual-date-start" value="${defaultActualDateStart}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important; border:1px solid #d97706; border-radius:6px; width:100%;">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="rev-actual-time-start" style="font-size:0.74rem; font-weight:600; color:#78350f;">Accepted Time Start</label>
+                                    <input type="time" id="rev-actual-time-start" value="${defaultActualTimeStart}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important; border:1px solid #d97706; border-radius:6px; width:100%;">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="rev-actual-date-end" style="font-size:0.74rem; font-weight:600; color:#78350f;">Accepted Date End</label>
+                                    <input type="date" id="rev-actual-date-end" value="${defaultActualDateEnd}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important; border:1px solid #d97706; border-radius:6px; width:100%;">
+                                </div>
+                                <div class="form-group" style="margin-bottom:0;">
+                                    <label for="rev-actual-time-end" style="font-size:0.74rem; font-weight:600; color:#78350f;">Accepted Time End</label>
+                                    <input type="time" id="rev-actual-time-end" value="${defaultActualTimeEnd}" style="padding:5px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important; border:1px solid #d97706; border-radius:6px; width:100%;">
+                                </div>
+                            </div>
+
+                            <div style="display:grid; grid-template-columns: 1fr auto; gap:10px; align-items:center; margin-top:8px;">
+                                <div id="rev-actual-calc-indicator"></div>
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <label for="rev-actual-net-override" style="font-size:0.75rem; font-weight:700; color:#92400e; white-space:nowrap;">Final Hours:</label>
+                                    <input type="number" id="rev-actual-net-override" step="0.1" min="0.1" max="24" value="${Number(req.actualDuration || req.duration || 0).toFixed(1)}" style="width:75px; padding:4px 6px; font-size:0.85rem; font-weight:700; color:#065f46 !important; background:#fff !important; border:1.5px solid #059669; border-radius:6px; text-align:center;">
+                                </div>
+                            </div>
+                        </div>
+
                         <label for="rev-verify-remarks-input" style="font-weight:700; font-size:0.82rem; color:#92400e; display:block; margin-bottom:4px;">
                             Superior Verification Comments / Feedback:
                         </label>
                         <textarea id="rev-verify-remarks-input" placeholder="Add verification notes or feedback for the worker..." style="width:100%; min-height:50px; border-radius:6px; border:1px solid #d97706; padding:6px 8px; font-size:0.82rem; background:#fff !important; color:#0f172a !important;"></textarea>
-                        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:8px;">
+                        <div style="display:flex; justify-content:flex-end; gap:8px; margin-top:10px;">
                             <button type="button" class="btn btn-danger btn-sm" id="rev-btn-reject-actuals">Dispute / Reject Actuals</button>
                             <button type="button" class="btn btn-success btn-sm" id="rev-btn-approve-actuals" style="font-weight:700;">✓ Verify &amp; Approve Actuals</button>
                         </div>
@@ -1253,13 +1307,104 @@ export function openRequestReviewModal(requestId) {
 
     // Attach verification action handlers
     const btnApproveActuals = document.getElementById('rev-btn-approve-actuals');
+    const btnRejectActuals = document.getElementById('rev-btn-reject-actuals');
+    const dsActInput = document.getElementById('rev-actual-date-start');
+    const tsActInput = document.getElementById('rev-actual-time-start');
+    const deActInput = document.getElementById('rev-actual-date-end');
+    const teActInput = document.getElementById('rev-actual-time-end');
+    const netOverrideInput = document.getElementById('rev-actual-net-override');
+    const calcIndicator = document.getElementById('rev-actual-calc-indicator');
+
+    if (dsActInput && tsActInput && deActInput && teActInput && calcIndicator) {
+        const getRevActualRange = () => {
+            const ds = dsActInput.value;
+            const ts = cleanTime(tsActInput.value);
+            const de = deActInput.value;
+            const te = cleanTime(teActInput.value);
+            if (!ds || !ts || !de || !te) return null;
+            const startObj = new Date(`${ds}T${ts}:00`);
+            const endObj = new Date(`${de}T${te}:00`);
+            if (isNaN(startObj.getTime()) || isNaN(endObj.getTime())) return null;
+            const grossHours = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
+            return { startISO: startObj.toISOString(), endISO: endObj.toISOString(), grossHours, ds, de, ts, te };
+        };
+
+        const checkRevActualCompliance = (updateOverride = true) => {
+            const range = getRevActualRange();
+            if (!range || range.grossHours <= 0) {
+                calcIndicator.innerHTML = `<div class="info-alert info-alert-danger" style="margin-bottom:0; font-size:0.78rem; padding:5px 8px;">End date/time must be later than start date/time.</div>`;
+                if (btnApproveActuals) btnApproveActuals.disabled = true;
+                return null;
+            }
+            if (btnApproveActuals) btnApproveActuals.disabled = false;
+            const otCalc = db.calculateNetOvertime(range.grossHours);
+            const restNote = otCalc.restDeducted > 0 ? ` <span style="color:#b45309; font-size:0.74rem;">(Gross: ${range.grossHours.toFixed(1)}h, Rest: -${otCalc.restDeducted.toFixed(1)}h)</span>` : '';
+            calcIndicator.innerHTML = `<div class="info-alert info-alert-success" style="margin-bottom:0; font-size:0.78rem; padding:5px 8px; background:#ecfdf5; border-color:#a7f3d0; color:#065f46;">
+                Calculated: <strong style="font-size:0.92rem; color:#047857;">${otCalc.netHours.toFixed(1)}h claimable</strong>${restNote}
+            </div>`;
+            if (updateOverride && netOverrideInput) {
+                netOverrideInput.value = otCalc.netHours.toFixed(1);
+            }
+            return { range, otCalc };
+        };
+
+        dsActInput.onchange = () => {
+            if (!deActInput.value || deActInput.value < dsActInput.value) {
+                deActInput.value = dsActInput.value;
+            }
+            checkRevActualCompliance(true);
+        };
+        tsActInput.onchange = () => checkRevActualCompliance(true);
+        deActInput.onchange = () => checkRevActualCompliance(true);
+        teActInput.onchange = () => checkRevActualCompliance(true);
+
+        checkRevActualCompliance(false);
+    }
+
     if (btnApproveActuals) {
         btnApproveActuals.onclick = () => {
             const remarks = document.getElementById('rev-verify-remarks-input')?.value || '';
+            const range = (dsActInput && tsActInput && deActInput && teActInput) ? (() => {
+                const ds = dsActInput.value;
+                const ts = cleanTime(tsActInput.value);
+                const de = deActInput.value;
+                const te = cleanTime(teActInput.value);
+                if (!ds || !ts || !de || !te) return null;
+                const startObj = new Date(`${ds}T${ts}:00`);
+                const endObj = new Date(`${de}T${te}:00`);
+                if (isNaN(startObj.getTime()) || isNaN(endObj.getTime())) return null;
+                const grossHours = (endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60);
+                return { startISO: startObj.toISOString(), endISO: endObj.toISOString(), grossHours, ds, de, ts, te };
+            })() : null;
+
+            if (range && range.grossHours <= 0) {
+                showToast("Please specify a valid finish time later than start time.", "error");
+                return;
+            }
+
+            const otCalc = range ? db.calculateNetOvertime(range.grossHours) : null;
+            let finalDuration = otCalc ? otCalc.netHours : (Number(req.actualDuration) || Number(req.duration) || 0);
+            if (netOverrideInput && !isNaN(Number(netOverrideInput.value)) && Number(netOverrideInput.value) > 0) {
+                finalDuration = Number(netOverrideInput.value);
+            }
+
             try {
-                db.verifyOvertimeActuals(req.id, { approved: true, remarks }, currentUser.id);
+                db.verifyOvertimeActuals(req.id, {
+                    approved: true,
+                    remarks,
+                    adjustedStartDate: range ? range.startISO : null,
+                    adjustedEndDate: range ? range.endISO : null,
+                    adjustedDateStart: range ? range.ds : null,
+                    adjustedDateEnd: range ? range.de : null,
+                    adjustedTimeStart: range ? range.ts : null,
+                    adjustedTimeEnd: range ? range.te : null,
+                    adjustedGrossDuration: range ? range.grossHours : null,
+                    adjustedRestDeduction: otCalc ? otCalc.restDeducted : null,
+                    adjustedDuration: finalDuration
+                }, currentUser.id);
+
                 modal.classList.remove('active');
-                showToast(`OT Record ${req.id} actuals verified & approved.`, "success");
+                showToast(`OT Record ${req.id} actuals verified & finalized (${finalDuration.toFixed(1)} hrs).`, "success");
                 renderActiveView();
             } catch (err) {
                 showToast(err.message || "Failed to verify actuals.", "error");
@@ -1267,7 +1412,6 @@ export function openRequestReviewModal(requestId) {
         };
     }
 
-    const btnRejectActuals = document.getElementById('rev-btn-reject-actuals');
     if (btnRejectActuals) {
         btnRejectActuals.onclick = () => {
             const remarks = document.getElementById('rev-verify-remarks-input')?.value || '';
