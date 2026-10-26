@@ -99,10 +99,16 @@ export function renderAdminDashboard(container) {
     `;
 
     // Current user personal monthly limit calculation
+    const now = new Date();
+    const curYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
     const myAllRequests = requests.filter(r => 
         r.requesterId === currentUserId || (r.teamMembers && r.teamMembers.includes(currentUserId))
     );
-    const myApproved = myAllRequests.filter(r => r.status === 'Approved' || r.status === 'Completed' || r.status === 'Pending Verification');
+    const myApproved = myAllRequests.filter(r => {
+        if (r.status !== 'Approved' && r.status !== 'Completed' && r.status !== 'Pending Verification') return false;
+        const dStr = r.startDate || r.dateStart || r.overtimeDate;
+        return dStr && dStr.slice(0, 7) === curYearMonth;
+    });
     const myApprovedHours = myApproved.reduce((acc, r) => {
         const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
         return acc + (isNaN(h) ? 0 : h);
@@ -1647,9 +1653,15 @@ export function renderAdminReport(container) {
                     return acc + (isNaN(h) ? 0 : h);
                 }, 0);
                 
-                const workerAllAuthorized = allReqs.filter(r => 
-                    (r.status === 'Approved' || r.status === 'Completed' || r.status === 'Pending Verification') && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
-                );
+                // Target calendar month for statutory monthly accrual (from filter or current month)
+                const targetMonthStr = fromDateStr ? fromDateStr.slice(0, 7) : (toDateStr ? toDateStr.slice(0, 7) : new Date().toISOString().slice(0, 7));
+
+                const workerAllAuthorized = allReqs.filter(r => {
+                    if (r.status !== 'Approved' && r.status !== 'Completed' && r.status !== 'Pending Verification') return false;
+                    if (r.requesterId !== workerId && (!r.teamMembers || !r.teamMembers.includes(workerId))) return false;
+                    const dStr = r.startDate || r.dateStart || r.overtimeDate;
+                    return dStr && dStr.slice(0, 7) === targetMonthStr;
+                });
                 const totalAccruedMonth = workerAllAuthorized.reduce((acc, r) => {
                     const h = (r.status === 'Completed' || r.status === 'Pending Verification') && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
                     return acc + (isNaN(h) ? 0 : h);

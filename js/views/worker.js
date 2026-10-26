@@ -7,13 +7,21 @@ export function renderWorkerView(container, workerId) {
         r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId))
     );
 
-    const completedRequests = workerRequests.filter(r => r.status === 'Completed');
-    const activeApprovedRequests = workerRequests.filter(r => r.status === 'Approved');
+    const now = new Date();
+    const curYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    const thisMonthRequests = workerRequests.filter(r => {
+        const dStr = r.startDate || r.dateStart || r.overtimeDate;
+        return dStr && dStr.slice(0, 7) === curYearMonth;
+    });
+
+    const completedRequests = thisMonthRequests.filter(r => r.status === 'Completed');
+    const activeApprovedRequests = thisMonthRequests.filter(r => r.status === 'Approved' || r.status === 'Pending Verification');
     const pendingRequests = workerRequests.filter(r => r.status === 'Pending Approval' || r.status === 'Pending Worker Consent');
     
     // Completed hours count as official recorded hours
     const totalRecordedHours = completedRequests.reduce((acc, r) => acc + (Number(r.actualDuration != null ? r.actualDuration : r.duration) || 0), 0);
-    const totalPlannedApprovedHours = activeApprovedRequests.reduce((acc, r) => acc + (Number(r.duration) || 0), 0);
+    const totalPlannedApprovedHours = activeApprovedRequests.reduce((acc, r) => acc + (Number(r.actualDuration != null ? r.actualDuration : r.duration) || 0), 0);
     const totalAuthorizedHours = totalRecordedHours + totalPlannedApprovedHours;
 
     const limits = db.getWorkerLimits(workerId);

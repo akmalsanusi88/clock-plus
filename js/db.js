@@ -1592,7 +1592,7 @@ class Database {
     }
 
     getAccruedHours(workerId, dateStr, scope = 'day') {
-        const requests = this.getRequests().filter(r => r.status === 'Approved' || r.status === 'Completed');
+        const requests = this.getRequests().filter(r => r.status === 'Approved' || r.status === 'Completed' || r.status === 'Pending Verification');
         
         let startWindow, endWindow;
         const refDate = new Date(dateStr + 'T00:00:00');
@@ -1616,8 +1616,8 @@ class Database {
         let totalHours = 0;
         for (const req of requests) {
             if (req.requesterId === workerId || (req.teamMembers && req.teamMembers.includes(workerId))) {
-                const sDate = req.status === 'Completed' && req.actualStartDate ? req.actualStartDate : req.startDate;
-                const eDate = req.status === 'Completed' && req.actualEndDate ? req.actualEndDate : req.endDate;
+                const sDate = (req.status === 'Completed' || req.status === 'Pending Verification') && req.actualStartDate ? req.actualStartDate : req.startDate;
+                const eDate = (req.status === 'Completed' || req.status === 'Pending Verification') && req.actualEndDate ? req.actualEndDate : req.endDate;
                 totalHours += this.getOverlapInHours(sDate, eDate, startWindow, endWindow);
             }
         }
@@ -1629,14 +1629,7 @@ class Database {
         const limits = this.getWorkerLimits(workerId);
         const dailyAccrued = this.getAccruedHours(workerId, dateStr, 'day');
         const weeklyAccrued = this.getAccruedHours(workerId, dateStr, 'week');
-        
-        const authorizedReqs = this.getRequests().filter(r => 
-            (r.status === 'Approved' || r.status === 'Completed') && (r.requesterId === workerId || (r.teamMembers && r.teamMembers.includes(workerId)))
-        );
-        const totalAuthorized = authorizedReqs.reduce((acc, r) => {
-            const h = r.status === 'Completed' && r.actualDuration != null ? Number(r.actualDuration) : Number(r.duration || 0);
-            return acc + (isNaN(h) ? 0 : h);
-        }, 0);
+        const monthlyAccrued = this.getAccruedHours(workerId, dateStr, 'month');
 
         const dailyMax = limits.dailyMax || 4;
         const weeklyMax = limits.weeklyMax || 12;
@@ -1644,15 +1637,15 @@ class Database {
 
         const dailyRemaining = Math.max(0, dailyMax - dailyAccrued);
         const weeklyRemaining = Math.max(0, weeklyMax - weeklyAccrued);
-        const monthlyRemaining = Math.max(0, monthlyMax - totalAuthorized);
+        const monthlyRemaining = Math.max(0, monthlyMax - monthlyAccrued);
 
         return {
             limits: { dailyMax, weeklyMax, monthlyMax, ...limits },
             accrued: {
                 day: dailyAccrued || 0,
                 week: weeklyAccrued || 0,
-                month: totalApproved || 0,
-                total: totalApproved || 0
+                month: monthlyAccrued || 0,
+                total: monthlyAccrued || 0
             },
             remaining: {
                 day: dailyRemaining || 0,
