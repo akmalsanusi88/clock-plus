@@ -924,10 +924,11 @@ export function renderAdminReport(container) {
     const currentUser = db.getCurrentUser();
     const currentUserId = currentUser ? currentUser.id : null;
     const currentRole = (currentUser?.role || 'worker').toLowerCase().trim();
-    const isSuperAdmin = currentRole === 'superadmin';
-    const isGlobalAdmin = currentRole === 'superadmin' || currentRole === 'admin';
-    const isManager = currentRole === 'superior' || currentRole === 'manager';
-    const isRestrictedToSelf = !isGlobalAdmin && !isManager; // supervisor or worker
+    const userScope = currentUser ? (currentUser.data_scope || currentUser.dataScope || db.getUserDataScope(currentUser.id)) : 'own';
+    const isSuperAdmin = currentRole === 'superadmin' && userScope === 'global';
+    const isGlobalAdmin = (currentRole === 'superadmin' || currentRole === 'admin') && userScope === 'global';
+    const isManager = (currentRole === 'superior' || currentRole === 'manager') && userScope !== 'own';
+    const isRestrictedToSelf = userScope === 'own' || (!isGlobalAdmin && !isManager); // personal / self scope
 
     let selectedEmployeeId = isRestrictedToSelf ? (currentUser?.id || '') : '';
     let selectedProjectId = '';
@@ -1313,14 +1314,17 @@ export function renderAdminReport(container) {
         const currentUsers = db.getUsers();
 
         let accessibleWorkerIds = [];
-        if (isGlobalAdmin) {
-            // Admin & Super Admin: all workers across entire company
+        if (isRestrictedToSelf || userScope === 'own') {
+            accessibleWorkerIds = currentUser ? [currentUser.id] : [];
+        } else if (isGlobalAdmin && userScope === 'global') {
+            // Admin & Super Admin with global scope: all workers across entire company
             accessibleWorkerIds = currentUsers.map(u => u.id);
-        } else if (isManager) {
-            // Manager: their own level and below (manager, supervisor, worker)
-            accessibleWorkerIds = currentUsers.filter(u => u.role !== 'admin' && u.role !== 'superadmin').map(u => u.id);
+        } else if (isManager || userScope === 'team') {
+            // Manager / Team scope: their own level and subordinates
+            const subIds = db.getSubordinatesForSuperior(currentUser.id).map(u => u.id);
+            const teamIds = new Set([currentUser.id, ...subIds]);
+            accessibleWorkerIds = Array.from(teamIds);
         } else {
-            // Supervisor & Worker: strictly their own records only
             accessibleWorkerIds = currentUser ? [currentUser.id] : [];
         }
 
@@ -1384,9 +1388,15 @@ export function renderAdminReport(container) {
 
         const participatingWorkerIds = new Set();
         currentFiltered.forEach(r => {
-            if (r.requesterId) participatingWorkerIds.add(r.requesterId);
+            if (r.requesterId && accessibleWorkerIds.includes(r.requesterId)) {
+                participatingWorkerIds.add(r.requesterId);
+            }
             if (r.teamMembers && Array.isArray(r.teamMembers)) {
-                r.teamMembers.forEach(tid => participatingWorkerIds.add(tid));
+                r.teamMembers.forEach(tid => {
+                    if (accessibleWorkerIds.includes(tid)) {
+                        participatingWorkerIds.add(tid);
+                    }
+                });
             }
         });
 
